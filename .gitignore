@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+output/
+debug_log.txt
+*.xlsx
+*.xls
+*.csv
+!app/
+!resources/
+!main.py
+!USER_GUIDE.md
+!requirements.txt
