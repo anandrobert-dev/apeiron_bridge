@@ -98,6 +98,7 @@ class MainWindow(QMainWindow):
         """
         Executes the reconciliation process using SOAEngine.
         config: dict with 'rules', 'date_col', 'amount_col'
+        Rules format: {ref_full_path: {match_col, return_cols, match_type}}
         """
         try:
             print(f"DEBUG: Running Reconciliation with config: {config}")
@@ -110,36 +111,45 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Reconciliation Error", "No mapping rules provided.")
                 return
 
-            # Prepare data for SOAEngine
-            first_rule = list(mapping_rules.values())[0]
-            soa_match_col = first_rule["base_col"] 
+            # The SOA match column comes from the base column selected in the left panel.
+            # In the Oi360 original, the SOA match column was user-selected separately.
+            # For now, we use the first item currently selected in the base column list.
+            soa_match_col = self.mapping_screen.list_base_cols.currentItem()
+            if soa_match_col:
+                soa_match_col = soa_match_col.text()
+            else:
+                # Fallback: use first base column
+                if self.mapping_screen.base_columns:
+                    soa_match_col = self.mapping_screen.base_columns[0]
+                else:
+                    QMessageBox.warning(self, "Reconciliation Error", "No base match column selected.")
+                    return
             
             ref_configs = []
             import pandas as pd
             
-            for ref_name, rule in mapping_rules.items():
-                ref_path = None
-                for path in self.current_ref_files:
-                     if os.path.basename(path) == ref_name:
-                         ref_path = path
-                         break
+            for ref_path, rule in mapping_rules.items():
+                ref_display = os.path.basename(ref_path)
+                ref_match_col = rule["match_col"]
+                return_cols = rule["return_cols"]
                 
-                if ref_path:
+                if os.path.exists(ref_path):
                     try:
                         if ref_path.endswith('.csv'):
                             df = pd.read_csv(ref_path)
                         else:
                             df = pd.read_excel(ref_path)
                         
-                        return_cols = list(df.columns)
-                        if rule["ref_col"] in return_cols:
-                            return_cols.remove(rule["ref_col"]) 
-                            
-                        ref_configs.append((df, rule["ref_col"], return_cols, ref_name))
+                        # Use a clean ref name for column prefixing (e.g., "Ref1", "Ref2")
+                        ref_name = f"Ref{len(ref_configs) + 1}"
+                        ref_configs.append((df, ref_match_col, return_cols, ref_name))
                     except Exception as e:
                         print(f"Error loading {ref_path}: {e}")
-                        QMessageBox.critical(self, "File Load Error", f"Error loading reference file {ref_name}:\n{str(e)}")
+                        QMessageBox.critical(self, "File Load Error", f"Error loading reference file {ref_display}:\n{str(e)}")
                         return
+                else:
+                    QMessageBox.critical(self, "File Not Found", f"Reference file not found:\n{ref_path}")
+                    return
 
             # Load Base DF
             soa_path = self.current_base_file
