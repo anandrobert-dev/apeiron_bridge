@@ -68,6 +68,7 @@ class MainWindow(QMainWindow):
         self.mapping_screen.run_reco.connect(self.run_reconciliation)
         
         self.results_screen.go_home.connect(lambda: self.navigate_to(0))
+        self.results_screen.go_back.connect(lambda: self.navigate_to(2))
 
     def navigate_to(self, index):
         self.stack.setCurrentIndex(index)
@@ -165,16 +166,25 @@ class MainWindow(QMainWindow):
 
             # Initialize Engine
             engine = SOAEngine(soa_df, soa_match_col, date_col, amount_col, ref_configs)
-            result_df, saved_path = engine.run()
+            result_df, saved_path, discrepancy_df = engine.run()
             
             print(f"DEBUG: Reconciliation Complete. Saved to {saved_path}")
             
-            # Show Results
-            self.results_screen.display_results(result_df)
+            # Show Results (both detailed and discrepancy)
+            self.results_screen.display_results(result_df, discrepancy_df)
             self.stack.setCurrentWidget(self.results_screen)
             
             if saved_path:
-                 QMessageBox.information(self, "Reconciliation Complete", f"Results saved to:\n{saved_path}")
+                 file_name = os.path.basename(saved_path)
+                 folder = os.path.dirname(saved_path)
+                 msg = QMessageBox(self)
+                 msg.setWindowTitle("Reconciliation Complete")
+                 msg.setIcon(QMessageBox.Information)
+                 msg.setText(f"Reconciliation completed successfully!\n\nFile: {file_name}")
+                 msg.setInformativeText(f"Saved to:\n{folder}")
+                 msg.setStandardButtons(QMessageBox.Ok)
+                 msg.setMinimumWidth(500)
+                 msg.exec()
 
         except Exception as e:
             QMessageBox.critical(self, "Reconciliation Failed", f"An error occurred:\n{str(e)}")
