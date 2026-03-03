@@ -22,6 +22,7 @@ class ResultsScreen(QWidget):
         super().__init__(parent)
         self.result_df = None
         self.discrepancy_df = None
+        self.schema_df = None
         self.init_ui()
 
     def init_ui(self):
@@ -46,6 +47,10 @@ class ResultsScreen(QWidget):
         self.table_discrepancy = QTableWidget()
         self.tabs.addTab(self.table_discrepancy, "⚠️ Discrepancy Report")
         
+        # Tab 3: Normalized Comparison (Schema)
+        self.table_schema = QTableWidget()
+        self.tabs.addTab(self.table_schema, "🔍 Normalized Comparison")
+        
         layout.addWidget(self.tabs)
         
         # Footer
@@ -66,9 +71,10 @@ class ResultsScreen(QWidget):
         footer.addWidget(self.btn_export)
         layout.addLayout(footer)
 
-    def display_results(self, df: pd.DataFrame, discrepancy_df: pd.DataFrame = None):
+    def display_results(self, df: pd.DataFrame, discrepancy_df: pd.DataFrame = None, schema_df: pd.DataFrame = None):
         self.result_df = df
         self.discrepancy_df = discrepancy_df
+        self.schema_df = schema_df
         
         # Update Stats
         total = len(df)
@@ -98,6 +104,18 @@ class ResultsScreen(QWidget):
             self.table_discrepancy.setColumnCount(1)
             self.table_discrepancy.setHorizontalHeaderLabels(["Info"])
             self.table_discrepancy.setItem(0, 0, QTableWidgetItem("No discrepancy data available."))
+
+        # --- Tab 3: Normalized Comparison ---
+        if schema_df is not None and not schema_df.empty:
+            self._populate_table(self.table_schema, schema_df)
+            self._colorize_schema(self.table_schema, schema_df)
+            # Prioritize Schema tab if available
+            self.tabs.setCurrentIndex(2)
+        else:
+            self.table_schema.setRowCount(0)
+            self.table_schema.setColumnCount(1)
+            self.table_schema.setHorizontalHeaderLabels(["Info"])
+            self.table_schema.setItem(0, 0, QTableWidgetItem("No schema comparison data available."))
 
     def _populate_table(self, table: QTableWidget, df: pd.DataFrame):
         """Populate a QTableWidget from a DataFrame."""
@@ -177,10 +195,38 @@ class ResultsScreen(QWidget):
                 
                 if row_color:
                     for col_idx in range(len(cols)):
-                        if col_idx != idx_delta and col_idx != idx_status:
-                            cell = table.item(row_idx, col_idx)
-                            if cell:
-                                cell.setBackground(QBrush(row_color))
+                        cell = table.item(row_idx, col_idx)
+                        if cell:
+                            cell.setBackground(QBrush(row_color))
+
+    def _colorize_schema(self, table: QTableWidget, df: pd.DataFrame):
+        """Apply color-coding to the schema comparison table."""
+        cols = list(df.columns)
+        
+        # Colors
+        clr_red_bg = QColor("#3D1F1F")       
+        clr_red_text = QColor("#FF6B6B")     
+        clr_green_bg = QColor("#1F3D1F")      
+        clr_green_text = QColor("#6BCB77")    
+        clr_amber_bg = QColor("#3D3D1F")      
+        clr_amber_text = QColor("#FFD54F")    
+        
+        for col_idx, col_name in enumerate(cols):
+            if "Status" in col_name:
+                for row_idx in range(min(len(df), 200)):
+                    val = str(df.iloc[row_idx, col_idx])
+                    item = table.item(row_idx, col_idx)
+                    
+                    if item:
+                        if "MISMATCH" in val:
+                            item.setBackground(QBrush(clr_red_bg))
+                            item.setForeground(QBrush(clr_red_text))
+                        elif "MATCH" in val and "PARTIAL" not in val:
+                            item.setBackground(QBrush(clr_green_bg))
+                            item.setForeground(QBrush(clr_green_text))
+                        elif "PARTIAL" in val:
+                            item.setBackground(QBrush(clr_amber_bg))
+                            item.setForeground(QBrush(clr_amber_text))
 
     def export_data(self):
         if self.result_df is None:
@@ -196,6 +242,8 @@ class ResultsScreen(QWidget):
                     self.result_df.to_excel(writer, index=False, sheet_name='Detailed View')
                     if self.discrepancy_df is not None and not self.discrepancy_df.empty:
                         self.discrepancy_df.to_excel(writer, index=False, sheet_name='Discrepancy Report')
+                    if self.schema_df is not None and not self.schema_df.empty:
+                        self.schema_df.to_excel(writer, index=False, sheet_name='Normalized Comparison')
                 QMessageBox.information(self, "Success", f"Data exported to:\n{path}")
             except Exception as e:
                 QMessageBox.critical(self, "Export Failed", str(e))

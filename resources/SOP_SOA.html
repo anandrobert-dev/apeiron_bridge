@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        h1 {
+            color: #FFD700;
+            /* Gold */
+            text-align: center;
+            border-bottom: 2px solid #FFD700;
+            padding-bottom: 10px;
+            font-size: 24px;
+        }
+
+        h2 {
+            color: #00E5FF;
+            /* Cyan */
+            font-size: 18px;
+            margin-top: 25px;
+            border-bottom: 1px dashed #00E5FF;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #D500F9;
+            /* Purple */
+            font-size: 16px;
+            margin-top: 20px;
+        }
+
+        .highlight {
+            color: #FF4081;
+            /* Pinkish Red */
+            font-weight: bold;
+        }
+
+        .step {
+            margin-bottom: 15px;
+            padding-left: 15px;
+            border-left: 3px solid #333;
+        }
+
+        .step strong {
+            color: #FFFFFF;
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 10px;
+        }
+
+        li::before {
+            content: "•";
+            color: #00E5FF;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+        }
+
+        .tip {
+            background-color: #2D2D30;
+            border-left: 4px solid #4CAF50;
+            /* Green */
+            padding: 10px;
+            margin-top: 5px;
+            font-style: italic;
+            color: #A0A0A0;
+            font-size: 13px;
+        }
+
+        .panel-blue {
+            color: #64B5F6;
+            font-weight: bold;
+        }
+
+        .panel-green {
+            color: #81C784;
+            font-weight: bold;
+        }
+
+        .panel-pink {
+            color: #F06292;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Standard Operating Procedure (SOP)</h1>
+    <p style="text-align: center; color: #888;">SOA Reconciliation Module</p>
+
+    <p><strong>Apeiron Bridge</strong> simplifies your Statement of Account (SOA) reconciliation. Follow this guide to
+        match your SOA against multiple Reference files.</p>
+
+    <h2>Phase 1: Launch & File Selection</h2>
+
+    <div class="step">
+        1. <strong>Launch the Module</strong><br>
+        On the Welcome Screen, locate the <strong>"SOA Reconciliation"</strong> card and click the green <span
+            class="highlight">Launch</span> button.
+    </div>
+
+    <div class="step">
+        2. <strong>Select Base File (SOA)</strong><br>
+        Click <strong>"Browse Base File"</strong> and select your primary Statement of Account (Excel/CSV).<br>
+        <span class="highlight">New:</span> The system will automatically detect and select the <strong>Date</strong>
+        and <strong>Amount</strong> columns for you.
+    </div>
+
+    <div class="step">
+        3. <strong>Select Reference Files</strong><br>
+        Click <strong>"Add Reference File(s)"</strong> and select files to check against the SOA (e.g., Ref1, Ref2).<br>
+        Select the <strong>Match Key</strong> for each file (or let it auto-detect).
+    </div>
+
+    <div class="step">
+        4. <strong>Run Immediately (Recommended)</strong><br>
+        Click the green <strong>"▶ Run Reconciliation"</strong> button to process immediately.<br>
+        <div class="tip">This skips the mapping screen and uses all columns automatically!</div>
+    </div>
+
+    <div class="step">
+        5. <strong>Optional: Advanced Settings</strong><br>
+        Click <strong>"Advanced Settings >"</strong> only if you need fuzzy matching or specific column filtering.
+    </div>
+
+    <h2>Phase 2: Advanced Mapping (Optional)</h2>
+    <p>Only used if you clicked "Advanced Settings".</p>
+
+    <h3 class="panel-blue">1. Configure Base File (Left Panel)</h3>
+    <ul>
+        <li><strong>Base File Columns:</strong> Review selections (Date/Amount are read-only here).</li>
+    </ul>
+
+    <h3 class="panel-green">2. Configure Reference Files (Center Panel)</h3>
+    <ul>
+        <li><strong>Select Reference File:</strong> Use dropdown to pick file.</li>
+        <li><strong>Match Column:</strong> Verify the matching column.</li>
+        <li><strong>Return Columns:</strong> Uncheck columns you don't want in the report.</li>
+    </ul>
+
+    <h3 class="panel-pink">3. Rules & Templates (Right Panel)</h3>
+    <ul>
+        <li><strong>Fuzzy Match:</strong> Enable if IDs are messy (e.g., INV-100 vs 100).</li>
+        <li><strong>Templates:</strong> Save your bespoke configuration for future use.</li>
+    </ul>
+
+    <h2>Phase 3: Execution & Review</h2>
+
+    <div class="step">
+        1. <strong>Run Reconciliation</strong><br>
+        Click the <span class="highlight">Run Reconciliation</span> button (bottom right).
+    </div>
+
+    <div class="step">
+        2. <strong>View Results</strong><br>
+        Check the tabs: <strong>Detailed View</strong> (Full Data) and <strong>Discrepancy Report</strong> (Variances).
+    </div>
+
+    <div class="step">
+        3. <strong>Export</strong><br>
+        Click <strong>"Export to Excel"</strong> to save to Downloads.
+    </div>
+
+</body>
+
+</html>

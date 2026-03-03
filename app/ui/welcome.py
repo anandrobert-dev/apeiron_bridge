@@ -153,27 +153,94 @@ class WelcomeScreen(QWidget):
         actions_layout.setSpacing(30)
         actions_layout.setAlignment(Qt.AlignCenter)
 
-        # Module 1: SOA Reconciliation
-        card_soa, self.btn_soa = self.create_action_card(
-            "SOA Reconciliation",
-            "Compare Statement of Account against Reference files.",
-            "PrimaryButton"
-        )
+        # Google Colors
+        c_blue = "#4285F4"
+        c_red = "#EA4335"
+        c_yellow = "#FBBC05"
+        c_green = "#34A853"
+
+        # Module 1: SOA Reconciliation (BLUE Theme)
+        # Customized card with extra SOP button
+        card_soa = QFrame()
+        card_soa.setObjectName("Card")
+        card_soa.setFixedWidth(280)
+        card_soa.setFixedHeight(230) # Taller for extra space
+        # Card Style: Blue Border
+        card_soa.setStyleSheet(f"""
+            QFrame#Card {{
+                background-color: #2D2D30;
+                border: 2px solid {c_blue};
+                border-radius: 8px;
+            }}
+        """)
+        
+        card_soa_layout = QVBoxLayout(card_soa)
+        
+        lbl_title = QLabel("SOA Reconciliation")
+        lbl_title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {c_blue}; border: none; background: transparent;")
+        lbl_title.setAlignment(Qt.AlignCenter)
+        
+        lbl_desc = QLabel("Compare Statement of Account against Reference files.")
+        lbl_desc.setStyleSheet("color: #CCCCCC; font-size: 13px; border: none; background: transparent;")
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setAlignment(Qt.AlignCenter)
+        
+        self.btn_soa = QPushButton("Launch")
+        self.btn_soa.setObjectName("PrimaryButton")
+        # Button Style: Blue Filled
+        self.btn_soa.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c_blue};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #3367D6; }}
+        """)
+        
+        self.btn_sop = QPushButton("SOP FOR SOA") 
+        self.btn_sop.setObjectName("SecondaryButton") 
+        # Button Style: Yellow Outline (Distinct)
+        self.btn_sop.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: 2px solid {c_yellow};
+                color: {c_yellow};
+                border-radius: 4px;
+                padding: 5px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(251, 188, 5, 0.1);
+            }}
+        """)
+        self.btn_sop.clicked.connect(self.show_sop)
+        
+        card_soa_layout.addWidget(lbl_title)
+        card_soa_layout.addWidget(lbl_desc)
+        card_soa_layout.addStretch()
+        card_soa_layout.addWidget(self.btn_soa)
+        card_soa_layout.addWidget(self.btn_sop) 
+        
         actions_layout.addWidget(card_soa)
 
-        # Module 2: Multi-File Comparison
+        # Module 2: Multi-File Comparison (RED Theme)
         card_multi, self.btn_multi = self.create_action_card(
             "Multi-File Comparison",
             "Flexible matching across 2 to 5 distinct files.",
-            "SecondaryButton"
+            "SecondaryButton",
+            color=c_red
         )
         actions_layout.addWidget(card_multi)
 
-        # Module 3: CSV Matcher (Placeholder)
+        # Module 3: CSV Matcher (GREEN Theme)
         card_csv, self.btn_csv = self.create_action_card(
             "Quick CSV Match",
             "Rapidly join two CSVs based on a common key.",
-            "SecondaryButton"
+            "SecondaryButton",
+            color=c_green
         )
         actions_layout.addWidget(card_csv)
 
@@ -189,26 +256,48 @@ class WelcomeScreen(QWidget):
         footer.setStyleSheet("color: #5c8a8a; font-size: 12px;") 
         layout.addWidget(footer)
 
-    def create_action_card(self, title_text, desc_text, btn_object_name):
+    def create_action_card(self, title_text, desc_text, btn_object_name, color="#FFFFFF"):
         """Creates a visual card for a module."""
         card = QFrame()
         card.setObjectName("Card")
         card.setFixedWidth(280)
         card.setFixedHeight(200)
         
+        # Apply Card Border Color
+        card.setStyleSheet(f"""
+            QFrame#Card {{
+                background-color: #2D2D30;
+                border: 2px solid {color};
+                border-radius: 8px;
+            }}
+        """)
+        
         card_layout = QVBoxLayout(card)
         
         lbl_title = QLabel(title_text)
-        lbl_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFFFFF; border: none;")
+        # Title Color matching theme
+        lbl_title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {color}; border: none; background: transparent;")
         lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel(desc_text)
-        lbl_desc.setStyleSheet("color: #AAAAAA; font-size: 13px; border: none;")
+        lbl_desc.setStyleSheet("color: #CCCCCC; font-size: 13px; border: none; background: transparent;")
         lbl_desc.setWordWrap(True)
         lbl_desc.setAlignment(Qt.AlignCenter)
         
         btn = QPushButton("Launch")
         btn.setObjectName(btn_object_name)
+        # Button Color matching theme
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ opacity: 0.8; }}
+        """)
         
         card_layout.addWidget(lbl_title)
         card_layout.addWidget(lbl_desc)
@@ -216,4 +305,97 @@ class WelcomeScreen(QWidget):
         card_layout.addWidget(btn)
         
         return card, btn
+
+    # Persist the SOP window instance
+    sop_window = None
+
+    def show_sop(self):
+        """Opens a detached, non-blocking window to display the SOP markdown file."""
+        from PySide6.QtWidgets import QDialog, QTextEdit, QVBoxLayout, QPushButton, QDialogButtonBox, QLabel, QWidget
+        from PySide6.QtGui import QIcon
+        import os
+        
+        # Check if window already exists
+        if self.sop_window is None:
+            # Create a new top-level window (no parent = detachable)
+            self.sop_window = QDialog(None) 
+            self.sop_window.setWindowTitle("SOP for SOA Reconciliation")
+            self.sop_window.resize(900, 700)
+            
+            # Use Fusion style or inherit app style? Default is fine.
+            # Make it look like a document viewer
+            
+            layout = QVBoxLayout(self.sop_window)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            
+            # Header Bar
+            header = QWidget()
+            header.setStyleSheet("background-color: #2D2D30; border-bottom: 2px solid #444;")
+            header.setFixedHeight(40)
+            header_layout = QHBoxLayout(header)
+            header_layout.setContentsMargins(15, 0, 15, 0)
+            
+            lbl_title = QLabel("Standard Operating Procedure")
+            lbl_title.setStyleSheet("color: #DDD; font-weight: bold; font-size: 14px;")
+            header_layout.addWidget(lbl_title)
+            
+            layout.addWidget(header)
+            
+            text_edit = QTextEdit()
+            text_edit.setReadOnly(True)
+            # Use simple reliable styling for the container, content handles its own style
+            text_edit.setStyleSheet("background-color: #1E1E1E; border: none;")
+            
+            # Load HTML content
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            sop_path = os.path.join(base_dir, "resources", "SOP_SOA.html")
+            
+            if os.path.exists(sop_path):
+                with open(sop_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                text_edit.setHtml(content)
+            else:
+                text_edit.setPlainText("SOP file not found.")
+                
+            layout.addWidget(text_edit)
+            
+            # Close button footer
+            footer = QWidget()
+            footer.setStyleSheet("background-color: #2D2D30; border-top: 1px solid #444;")
+            footer_layout = QHBoxLayout(footer)
+            footer_layout.setContentsMargins(10, 10, 10, 10)
+            footer_layout.addStretch()
+            
+            btn_close = QPushButton("Close Manual")
+            btn_close.setMinimumWidth(120)
+            btn_close.setStyleSheet("""
+                QPushButton {
+                    background-color: #444; color: white; border: none; padding: 8px; border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #555; }
+            """)
+            btn_close.clicked.connect(self.sop_window.close)
+            footer_layout.addWidget(btn_close)
+            
+            layout.addWidget(footer)
+            
+            # Clean up when closed? Or keep instance? 
+            # If closed, just hide it? 
+            # If closed, we might want to recreate it if language changes etc, but for now simple hide on close is fine or standard close.
+            # QDialog close usually hides it unless WA_DeleteOnClose is set.
+            # We will just let it be.
+            
+            # Ensure it is destroyed when the main app closes?
+            # Since no parent, it might outlive main window if not careful.
+            # We can connect app exit or just set attribute.
+            self.sop_window.setAttribute(Qt.WA_DeleteOnClose)
+            # But if delete on close, self.sop_window becomes dangling C++ object.
+            # Safer: reset self.sop_window to None on destroyed signal.
+            self.sop_window.destroyed.connect(lambda: setattr(self, 'sop_window', None))
+
+        # Show the window non-modal
+        self.sop_window.show()
+        self.sop_window.raise_()
+        self.sop_window.activateWindow()
 

@@ -17,9 +17,9 @@ TEMPLATES_FILE = os.path.join(TEMPLATES_DIR, "mapping_templates.json")
 from app.ui.schema_config import SchemaConfigWidget
 
 
-class MappingScreen(QWidget):
+class SOAMappingScreen(QWidget):
     """
-    Screen for mapping columns between Base (SOA) and Reference files.
+    Screen for mapping columns for SOA Reconciliation matches.
     Matches the original Oi360 workflow:
       - SOA: select match column, date column, amount column
       - Each Ref: select match column (dropdown) + return columns (multi-select)
@@ -33,9 +33,12 @@ class MappingScreen(QWidget):
         self.base_file = None
         self.ref_files = []
         self.base_columns = [] 
-        self.ref_columns = {} # {ref_path: [cols]}
-        self.current_mode = "SOA" # Track current mode
-
+        self.ref_columns = {} # {ref_path: [columns]}
+        self.mapping_rules = {} # {ref_path: {match_col, return_cols, match_type}}
+        
+        # Load Template Logic
+        self.templates = self._get_templates()
+        
         self.init_ui()
 
     def init_ui(self):
@@ -70,14 +73,17 @@ class MappingScreen(QWidget):
         left_layout.addWidget(self.list_base_cols)
         
         # --- SOA Inputs (Date/Amount) ---
-        self.lbl_date_input = QLabel("Select Date Column (for Age Bucket):")
+        # These are now passed from File Selection, so we disable them or make them read-only
+        self.lbl_date_input = QLabel("Selected Date Column (Read-Only):")
         left_layout.addWidget(self.lbl_date_input)
         self.combo_date_col = QComboBox()
+        self.combo_date_col.setEnabled(False) # Read-only
         left_layout.addWidget(self.combo_date_col)
         
-        self.lbl_amount_input = QLabel("Select Amount Column (for Mismatch):")
+        self.lbl_amount_input = QLabel("Selected Amount Column (Read-Only):")
         left_layout.addWidget(self.lbl_amount_input)
         self.combo_amount_col = QComboBox()
+        self.combo_amount_col.setEnabled(False) # Read-only
         left_layout.addWidget(self.combo_amount_col)
 
         # --- MULTI Inputs (Master Match Key) ---
@@ -131,11 +137,6 @@ class MappingScreen(QWidget):
         center_layout.addWidget(self.list_ref_cols)
         
         splitter.addWidget(center_panel)
-
-        # ============== NEW PANEL: Embedded Schema Config (Multi-File Only) ==============
-        self.schema_widget = SchemaConfigWidget(self.ref_files, self.ref_columns)
-        self.schema_widget.setVisible(False) # Default hidden
-        splitter.addWidget(self.schema_widget)
         
         # Keep track of panels to toggle them
         self.panel_base = left_panel
@@ -270,147 +271,39 @@ class MappingScreen(QWidget):
         footer.addWidget(self.btn_run)
         layout.addLayout(footer)
         
-    def set_mode(self, mode):
-        """Updates labels based on the current mode (SOA vs MULTI)."""
-        if mode == "MULTI":
-            self.lbl_header.setText("Map Columns: Multi-File Comparison")
-            # Changed "Master" to "Anchor" for consistency
-            self.lbl_base_cols.setText("Primary (Anchor) File Columns")
-            self.lbl_ref_match.setText("Match Column (match against Anchor):")
-            self.btn_run.setText("Run Comparison")
-        else:
-            self.lbl_header.setText("Map Columns & Configure Rules")
-            self.lbl_base_cols.setText("Base File Columns (SOA)")
-            self.lbl_base_cols.setText("Base File Columns (SOA)")
-            self.lbl_ref_match.setText("Match Column (match against SOA):")
-            self.btn_run.setText("Run Reconciliation")
-            
-            # Show SOA Inputs, Hide Multi Inputs
-            self.lbl_date_input.setVisible(True)
-            self.combo_date_col.setVisible(True)
-            self.lbl_amount_input.setVisible(True)
-            self.combo_amount_col.setVisible(True)
-            
-            self.lbl_master_match.setVisible(False)
-            self.combo_base_match.setVisible(False)
-            
-            # Show Legacy Panels, Hide Schema Widget
-            self.panel_base.show()
-            self.panel_mapping.show()
-            self.schema_widget.hide()
-            
-            # Explicitly restore splitter sizes for SOA
-            # [Base, Mapping, Schema(Hidden), Rules]
-            # Schema is hidden, so index 2 is 0 width.
-            self.splitter.setSizes([250, 350, 0, 300])
-            
-            self.btn_schema_config.setVisible(False)
-
-        if mode == "MULTI":
-            # Show Multi Inputs, Hide SOA Inputs
-            self.lbl_date_input.setVisible(False)
-            self.combo_date_col.setVisible(False)
-            self.lbl_amount_input.setVisible(False)
-            self.combo_amount_col.setVisible(False)
-            
-            self.lbl_master_match.setVisible(True)
-            self.combo_base_match.setVisible(True)
-            
-
-            
-            # Hide Legacy Panels, Show Schema Widget
-            self.panel_base.hide()
-            self.panel_mapping.hide()
-            self.schema_widget.show()
-            
-            # Explicitly resize splitter to give space to schema widget
-            # [Base(Hidden), Mapping(Hidden), Schema, Rules]
-            # Since first two are hidden, they take 0 space.
-            # We want Schema to take most space, Rules take some.
-            self.splitter.setSizes([0, 0, 700, 300])
-            
-            self.btn_schema_config.setVisible(False)
-
-        
-        # Internal storage for rules: {ref_path: {match_col, return_cols, match_type}}
-        self.mapping_rules = {}
-        self.schema_config = [] # List of schema fields
-        self.last_ref_path = None # Track previous selection for auto-save
-        
-        # Load saved templates
-        self._load_templates_list()
-
-    # ======================== Data Setup ========================
-
-    def set_data(self, base_file, ref_files, base_cols, ref_cols_dict, match_keys=None):
+    def set_data(self, base_file, ref_files, base_cols, ref_cols_dict, match_keys=None, date_col=None, amount_col=None, file_column_config=None):
         self.base_file = base_file
         self.ref_files = ref_files
         self.base_columns = base_cols
         self.ref_columns = ref_cols_dict
         self.match_keys = match_keys or {}
+        self.file_column_config = file_column_config or {}
 
         self.last_ref_path = None
-
-        # Update Schema Widget with new data
-        if hasattr(self, 'schema_widget'):
-            self.schema_widget.ref_files = self.ref_files
-            self.schema_widget.ref_columns = self.ref_columns
-            # Re-init UI to reflect new columns (simple way)
-            # A better way would be methods on SchemaConfigWidget to update data, 
-            # but for now we can just rebuild it or clear it.
-            # Let's try to clear and re-populate the widget's internal state
-            self.schema_widget.schema = [] # Reset schema
-            # Remove old widget and create new one to ensure clean state
-            # (Crude but effective for rapid dev)
-            layout = self.schema_widget.layout()
-            # Actually, `SchemaConfigWidget` has `init_ui` we can re-call or improved `set_data` method.
-            # Let's look at `SchemaConfigWidget`. It uses `ref_files` in `init_ui`.
-            # We'll just manually clear and re-init for now.
-            # Clear existing layout safely
-            while layout.count():
-                item = layout.takeAt(0)
-                if item.widget():
-                    item.widget().deleteLater()
-                elif item.layout():
-                    # If it's a nested layout, we should theoretically clear it too, 
-                    # but for now let's just delete the layout item itself.
-                    # QLayout items are automatically deleted when taken if they are layouts? No.
-                    # Recursive deletion is safer.
-                    sub_layout = item.layout()
-                    while sub_layout.count():
-                        sub_item = sub_layout.takeAt(0)
-                        if sub_item.widget():
-                            sub_item.widget().deleteLater()
-                    sub_layout.deleteLater()
-
-            self.schema_widget.init_ui()
         
         # Populate Base columns list
         self.list_base_cols.clear()
         self.list_base_cols.addItems(self.base_columns)
         
-        # Populate Date and Amount dropdowns
+        # Populate Date and Amount dropdowns (Data passed from File Select)
         self.combo_date_col.clear()
         self.combo_date_col.addItems(self.base_columns)
-        
+        if date_col:
+            dt_idx = self.combo_date_col.findText(date_col)
+            if dt_idx >= 0: self.combo_date_col.setCurrentIndex(dt_idx)
+            
         self.combo_amount_col.clear()
         self.combo_amount_col.addItems(self.base_columns)
+        if amount_col:
+            amt_idx = self.combo_amount_col.findText(amount_col)
+            if amt_idx >= 0: self.combo_amount_col.setCurrentIndex(amt_idx)
         
-        # Populate Master Match Key dropdown
+        # Populate Master Match Key dropdown (Not used in SOA but part of UI structure)
         self.combo_base_match.clear()
         self.combo_base_match.addItems(self.base_columns)
         
-        # Auto-detect Date column
-        date_keywords = ['date', 'dt', 'dated', 'invoice date', 'inv date', 'receive date']
-        best_date_idx = self._find_best_column_match(self.base_columns, date_keywords)
-        if best_date_idx >= 0:
-            self.combo_date_col.setCurrentIndex(best_date_idx)
-        
-        # Auto-detect Amount column
-        amount_keywords = ['amount', 'amt', 'open amount', 'invoice amount', 'total', 'value', 'balance']
-        best_amt_idx = self._find_best_column_match(self.base_columns, amount_keywords)
-        if best_amt_idx >= 0:
-            self.combo_amount_col.setCurrentIndex(best_amt_idx)
+        # Auto-detect Date/Amount removed here as it's done in FileSelectScreen now.
+        # Logic is now just accepting the passed values.
         
         # Populate ref file selector
         self.combo_current_ref.blockSignals(True)
@@ -419,22 +312,17 @@ class MappingScreen(QWidget):
             self.combo_current_ref.addItem(os.path.basename(ref), ref)
         self.combo_current_ref.blockSignals(False)
 
-        # Handle Match Keys (Pre-selected)
+        # Handle Match Keys (Pre-selected) - SOA Logic
         if self.match_keys:
             # Base/Anchor Key
             if self.base_file in self.match_keys:
                 key = self.match_keys[self.base_file]
                 
-                if self.current_mode == "MULTI":
-                    self.lbl_master_match.setText(f"Primary Anchor Key: {key}")
-                    self.lbl_master_match.setVisible(True)
-                    self.combo_base_match.setVisible(False)
-                else:
-                    # SOA Mode: Auto-select in list widget
-                    items = self.list_base_cols.findItems(key, Qt.MatchExactly)
-                    if items:
-                        items[0].setSelected(True)
-                        self.list_base_cols.setCurrentItem(items[0])
+                # SOA Mode: Auto-select in list widget
+                items = self.list_base_cols.findItems(key, Qt.MatchExactly)
+                if items:
+                    items[0].setSelected(True)
+                    self.list_base_cols.setCurrentItem(items[0])
             
             # Disable Reference Match Combo (Visual indication handled in load_ref_ui)
             self.lbl_ref_match.setText("Match Column (Pre-selected):")
@@ -466,7 +354,8 @@ class MappingScreen(QWidget):
         # after data load (which might have reset some checks)
         # Re-apply mode visibility logic to ensure splitter sizes are correct
         # using the stored current_mode (set by MainWindow)
-        self.set_mode(self.current_mode)
+        # set_mode removed, ensure splitter sizes are default
+        self.splitter.setSizes([250, 350, 300])
 
 
     def _find_best_column_match(self, columns, keywords):
@@ -490,6 +379,11 @@ class MappingScreen(QWidget):
     def auto_configure_all_refs(self):
         """Automatically create mapping rules for all reference files based on filtered columns."""
         count = 0
+        
+        # Strategy:
+        # 1. Check if user configured specific columns in File Select (Pivot Style)
+        # 2. If so, use those columns (minus match key) as return columns
+        
         for ref_path in self.ref_files:
             # Skip if rule already exists (e.g. from template load, though this runs on init)
             if ref_path in self.mapping_rules:
@@ -506,13 +400,31 @@ class MappingScreen(QWidget):
             if not match_key:
                 continue
 
-            # Select ALL columns
-            all_cols = self.ref_columns.get(ref_path, [])
-            # Exclude match key from return cols if desired, but user usually wants everything
-            return_cols = [c for c in all_cols if c != match_key] 
-            if not return_cols:
-                return_cols = all_cols # Fallback
+            # Check for Custom Column Configuration
+            custom_cols = self.file_column_config.get(ref_path)
             
+            if custom_cols:
+                # Use User Selected Columns
+                # Ensure match key is not in return cols
+                return_cols = [c for c in custom_cols if c != match_key]
+                print(f"[MappingScreen] Auto-mapping {os.path.basename(ref_path)} using custom Selection ({len(return_cols)} columns)")
+            else:
+                 # Default: Do NOT auto-map EVERYTHING. 
+                 # User complained "waste time". If they didn't config, they might want to do it here.
+                 # BUT, previous logic was "Select ALL". Let's stick to "Select ALL" if no custom config to be safe?
+                 # Or maybe do nothing? The request was "we already configured... why waste time".
+                 # Implies: If configured -> Map it. If not -> Wait for user?
+                 # Let's stick to: If Configured -> Map. If Not -> Select All (Old behavior)
+                 # because otherwise they have to select manualy.
+                 all_cols = self.ref_columns.get(ref_path, [])
+                 return_cols = [c for c in all_cols if c != match_key]
+            
+            if not return_cols:
+                 # If only match key was selected, or empty, fallback to all (safeguard)
+                 # or if custom config was just match key, then return cols is empty.
+                 # Let's warn or just map empty?
+                 pass
+
             # Create Rule
             self.mapping_rules[ref_path] = {
                 "match_col": match_key,
@@ -563,13 +475,9 @@ class MappingScreen(QWidget):
              if idx >= 0:
                  self.combo_ref_match.setCurrentIndex(idx)
              
-             if self.current_mode == "MULTI":
-                 self.combo_ref_match.setEnabled(False)
-                 self.lbl_ref_match.setText(f"Match Column: {pre_selected} (Locked)")
-             else:
-                 # SOA Mode: Pre-select but allow change
-                 self.combo_ref_match.setEnabled(True)
-                 self.lbl_ref_match.setText(f"Match Column (Pre-selected):")
+             # SOA Mode: Pre-select but allow change
+             self.combo_ref_match.setEnabled(True)
+             self.lbl_ref_match.setText(f"Match Column (Pre-selected):")
                  
              match_key_locked = True # Treat as locked for restoration logic below (don't overwrite with saved rule immediately if upstream is set)
         else:
@@ -696,29 +604,18 @@ class MappingScreen(QWidget):
                 "then click 'Save Ref Mapping'.")
             return
             
-        if self.current_mode == "SOA":
-            # Strict SOA Config
-            config = {
-                "rules": self.mapping_rules,
-                "date_col": self.combo_date_col.currentText(),
-                "amount_col": self.combo_amount_col.currentText(),
-                "master_match_col": None, # SOA uses first col or internal logic if not set here
-                "schema_config": [], # No schema for SOA
-                "match_keys": {} # No match keys for SOA
-            }
-        else:
-            # Strict Multi-File Config
-            config = {
-                "rules": self.mapping_rules, # Still need file list, but logic is in Schema
-                "date_col": None,
-                "amount_col": None,
-                "master_match_col": self.combo_base_match.currentText(),
-                "schema_config": self.schema_widget.get_schema(),
-                "match_keys": getattr(self, 'match_keys', {})
-            }
+        # Strict SOA Config
+        config = {
+            "rules": self.mapping_rules,
+            "date_col": self.combo_date_col.currentText(),
+            "amount_col": self.combo_amount_col.currentText(),
+            "master_match_col": None, # SOA uses first col or internal logic if not set here
+            "schema_config": [], # No schema for SOA
+            "match_keys": {} # No match keys for SOA logic consumption (handled in set_data UI pre-selection)
+        }
         
-        print(f"[MappingScreen] Running in {self.current_mode} mode")
-        print(f"[MappingScreen] Config: {config}")
+        print(f"[SOAMappingScreen] Running in SOA mode")
+        print(f"[SOAMappingScreen] Config: {config}")
         self.run_reco.emit(config)
 
     # ======================== Template Persistence ========================
@@ -779,7 +676,7 @@ class MappingScreen(QWidget):
             "date_col": self.combo_date_col.currentText(),
             "amount_col": self.combo_amount_col.currentText(),
             "rules": {},
-            "schema_config": self.schema_widget.get_schema() if hasattr(self, 'schema_widget') else []
+            "schema_config": []
         }
         
         for ref_path, rule in self.mapping_rules.items():
