@@ -2,7 +2,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QFileDialog, QListWidget, QListWidgetItem, QComboBox, QMessageBox,
-    QProgressBar, QFrame, QGridLayout
+    QProgressBar, QFrame, QGridLayout, QLineEdit, QRadioButton
 )
 import PySide6.QtCore
 from PySide6.QtCore import Qt, Signal
@@ -14,9 +14,8 @@ class SOAFileSelectScreen(QWidget):
     """
     # Signal to proceed to Mapping Screen with loaded data
     # Signal to proceed to Mapping Screen with loaded data
-    # Signal to proceed to Mapping Screen with loaded data
-    # args: (base_file_path, list_of_ref_file_paths, config_json, match_keys, date_col, amount_col)
-    proceed_to_mapping = Signal(str, list, dict, dict, str, str)
+    # Signal for advanced schema-based mapping (base_file, ref_files, col_config, match_keys, date_col, amount_col, custom_names)
+    proceed_to_advanced_mapping = Signal(str, list, dict, dict, str, str, dict)
     # Signal to run reconciliation immediately (Skipping Mapping Screen)
     run_reconciliation_now = Signal(dict)
     go_back = Signal()
@@ -25,6 +24,8 @@ class SOAFileSelectScreen(QWidget):
         super().__init__(parent)
         self.files = [] # List of file paths
         self.file_column_config = {} # {file_path: [selected_columns]}
+        self.ref_custom_names = {} # {file_path: custom_display_name}
+        self.current_soa_path = None # Tracking the active SOA file
         self.setAcceptDrops(True) # Enable Drag & Drop
         self.init_ui()
 
@@ -47,7 +48,9 @@ class SOAFileSelectScreen(QWidget):
                     added_count += 1
         
         if added_count > 0:
-            self.update_base_combo()
+            if not self.current_soa_path:
+                self.toggle_soa_file(self.files[0])
+            self.update_role_labels()
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -56,7 +59,7 @@ class SOAFileSelectScreen(QWidget):
 
         # Header
         self.lbl_header = QLabel("Select Files for SOA Reconciliation")
-        self.lbl_header.setStyleSheet("font-size: 20px; font-weight: bold; color: #FFFFFF;")
+        self.lbl_header.setObjectName("HeaderTitle") # Use QSS for color/font
         layout.addWidget(self.lbl_header)
 
         # Controls (Add File)
@@ -77,41 +80,16 @@ class SOAFileSelectScreen(QWidget):
         # File List
         self.file_list = QListWidget()
         self.file_list.setObjectName("Card") # Style like a card
+        self.file_list.setDragDropMode(QListWidget.InternalMove)
+        self.file_list.setDefaultDropAction(PySide6.QtCore.Qt.MoveAction)
+        self.file_list.model().rowsMoved.connect(self.on_rows_moved)
         layout.addWidget(self.file_list, 1) # Expand to fill vertical space
 
-        # Base File Selection
-        base_selection_layout = QHBoxLayout()
-        self.lbl_base_select = QLabel("Select Base File (SOA):")
-        self.combo_base = QComboBox()
-        self.combo_base.setFixedWidth(400)
-        
-        base_selection_layout.addWidget(self.lbl_base_select)
-        base_selection_layout.addWidget(self.combo_base)
-        base_selection_layout.addStretch()
-        layout.addLayout(base_selection_layout)
-
-        # Date/Amount Selection (Moved from Mapping Screen)
-        input_layout = QHBoxLayout()
-        
-        # Date
-        input_layout.addWidget(QLabel("Date Column:"))
-        self.combo_date = QComboBox()
-        self.combo_date.setMinimumWidth(150)
-        input_layout.addWidget(self.combo_date)
-        
-        input_layout.addSpacing(20)
-        
-        # Amount
-        input_layout.addWidget(QLabel("Amount Column:"))
-        self.combo_amount = QComboBox()
-        self.combo_amount.setMinimumWidth(150)
-        input_layout.addWidget(self.combo_amount)
-        
-        input_layout.addStretch()
-        layout.addLayout(input_layout)
-        
         # Connect base selection change to column loading
-        self.combo_base.currentIndexChanged.connect(self.on_base_file_changed)
+        # (Legacy combo_base removed, logic will move to row toggles)
+        pass 
+
+        # layout.addStretch() # Removed to allow file list to expand
 
         # layout.addStretch() # Removed to allow file list to expand
 
@@ -119,50 +97,52 @@ class SOAFileSelectScreen(QWidget):
         nav_layout = QHBoxLayout()
         self.btn_back = QPushButton("Back")
         self.btn_back.clicked.connect(self.go_back.emit)
-        
-        self.btn_next = QPushButton("Next: Map Columns")
-        self.btn_next.setObjectName("PrimaryButton")
-        self.btn_next.clicked.connect(self.on_next)
-        
         nav_layout.addWidget(self.btn_back)
         nav_layout.addStretch()
+
+        # Right-side button row (Advanced Mapping and Run Reconciliation side-by-side)
+        right_buttons_widget = QWidget()
+        right_row = QHBoxLayout(right_buttons_widget)
+        right_row.setContentsMargins(0, 0, 0, 0)
+        right_row.setSpacing(12)
         
-        # Run Button (New)
-        self.btn_run = QPushButton("▶ Run Reconciliation")
-        self.btn_run.setObjectName("SuccessButton") # Green style usually
-        self.btn_run.setStyleSheet("""
-            QPushButton {
-                background-color: #2e7d32; 
+        self.btn_advanced = QPushButton("ADVANCE MAPPING")
+        self.btn_advanced.setCursor(Qt.PointingHandCursor)
+        self.btn_advanced.setFixedHeight(42)
+        self.btn_advanced.setStyleSheet("""
+            QPushButton { 
+                background-color: transparent; 
+                border: 2px solid #9C27B0; 
+                color: #BA68C8; 
+                padding: 0 25px; 
+                border-radius: 6px; 
+                font-size: 13px;
+                font-weight: bold; 
+            } 
+            QPushButton:hover { background-color: rgba(156, 39, 176, 0.1); border-color: #BA68C8; }
+        """)
+        self.btn_advanced.clicked.connect(self.on_advanced_mapping)
+        right_row.addWidget(self.btn_advanced)
+        
+        self.btn_run_quick = QPushButton("RUN RECONCILIATION")
+        self.btn_run_quick.setCursor(Qt.PointingHandCursor)
+        self.btn_run_quick.setFixedHeight(42)
+        self.btn_run_quick.setStyleSheet("""
+            QPushButton { 
+                background-color: #7B1FA2; 
                 color: white; 
-                font-weight: bold;
                 border: none; 
-                padding: 8px 16px; 
-                border-radius: 4px;
+                padding: 0 30px; 
+                border-radius: 6px; 
                 font-size: 14px;
-            }
-            QPushButton:hover { background-color: #388e3c; }
+                font-weight: bold; 
+            } 
+            QPushButton:hover { background-color: #8E24AA; }
         """)
-        self.btn_run.clicked.connect(self.on_run_click)
-        nav_layout.addWidget(self.btn_run)
+        self.btn_run_quick.clicked.connect(self.on_run_click)
+        right_row.addWidget(self.btn_run_quick)
         
-        nav_layout.addSpacing(10)
-        
-        self.btn_next = QPushButton("Advanced Settings >")
-        self.btn_next.setToolTip("Configure templates, fuzzy matching, or specific column mapping.")
-        # specific style for next to differentiate
-        self.btn_next.setStyleSheet("""
-             QPushButton {
-                background-color: #555; 
-                color: #EEE; 
-                border: 1px solid #777; 
-                padding: 8px 16px; 
-                border-radius: 4px;
-            }
-            QPushButton:hover { background-color: #666; }
-        """)
-        self.btn_next.clicked.connect(self.on_next)
-        
-        nav_layout.addWidget(self.btn_next)
+        nav_layout.addWidget(right_buttons_widget)
         layout.addLayout(nav_layout)
 
     def browse_files(self):
@@ -174,55 +154,36 @@ class SOAFileSelectScreen(QWidget):
                 if path not in self.files:
                     self.files.append(path)
                     self.add_file_to_ui(path)
-            self.update_base_combo()
+            if not self.current_soa_path and self.files:
+                self.toggle_soa_file(self.files[0])
+            self.update_role_labels()
 
-    def _save_match_key_selections(self):
-        """Save current match key combo selections for all files."""
-        selections = {}
+    def on_rows_moved(self, parent, start, end, destination, row):
+        """Sync self.files when rows are moved via drag-and-drop and refresh widgets."""
+        # 1. Update self.files list to match new order
+        new_files = []
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
             path = item.data(Qt.UserRole)
-            combo = item.data(Qt.UserRole + 1)
-            if path and combo:
-                selections[path] = combo.currentText()
-        return selections
+            if path:
+                new_files.append(path)
+        self.files = new_files
 
-    def _restore_match_key_selections(self, selections):
-        """Restore match key combo selections after rebuilding the list."""
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            path = item.data(Qt.UserRole)
-            combo = item.data(Qt.UserRole + 1)
-            if path and combo and path in selections:
-                idx = combo.findText(selections[path])
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-
-    def move_file_up(self, path):
-        """Move a file one position up in the list."""
-        idx = self.files.index(path)
-        if idx > 0:
-            saved = self._save_match_key_selections()
-            self.files[idx], self.files[idx - 1] = self.files[idx - 1], self.files[idx]
-            self.rebuild_file_list()
-            self._restore_match_key_selections(saved)
-            self.update_base_combo()
-
-    def move_file_down(self, path):
-        """Move a file one position down in the list."""
-        idx = self.files.index(path)
-        if idx < len(self.files) - 1:
-            saved = self._save_match_key_selections()
-            self.files[idx], self.files[idx + 1] = self.files[idx + 1], self.files[idx]
-            self.rebuild_file_list()
-            self._restore_match_key_selections(saved)
-            self.update_base_combo()
+        # 2. Re-link widgets (InternalMove loses setItemWidget mapping)
+        # However, InternalMove in QListWidget usually just moves the item.
+        # But setItemWidget often breaks. Let's force a rebuild for safety
+        # or just ensure current state is correct.
+        # Actually, a better way is to not use setItemWidget or to re-set it.
+        # For QListWidget InternalMove, the widget is often destroyed.
+        # So we MUST rebuild the list.
+        self.rebuild_file_list()
 
     def rebuild_file_list(self):
         """Clear and rebuild the file list widget from self.files, preserving column configs."""
         self.file_list.clear()
         for path in self.files:
             self.add_file_to_ui(path)
+        self.update_role_labels() # Ensure roles and placeholders are correct after rebuild
 
     def add_file_to_ui(self, path):
         # Create Item
@@ -237,9 +198,9 @@ class SOAFileSelectScreen(QWidget):
         # ▲/▼ Reorder Buttons
         arrow_style = """
             QPushButton {
-                background-color: #3a3a3a;
-                color: #CCC;
-                border: 1px solid #555;
+                background-color: transparent;
+                color: #888;
+                border: 1px solid #888;
                 border-radius: 3px;
                 font-size: 12px;
                 font-weight: bold;
@@ -249,83 +210,103 @@ class SOAFileSelectScreen(QWidget):
                 min-height: 22px;
                 max-height: 22px;
             }
-            QPushButton:hover { background-color: #4a4a4a; color: #FFF; }
-            QPushButton:pressed { background-color: #555; }
+            QPushButton:hover { background-color: rgba(128,128,128,0.1); color: #BA68C8; border-color: #BA68C8; }
         """
         
-        btn_up = QPushButton("▲")
-        btn_up.setStyleSheet(arrow_style)
-        btn_up.setToolTip("Move up")
-        btn_up.setCursor(Qt.PointingHandCursor)
-        btn_up.clicked.connect(lambda checked=False, p=path: self.move_file_up(p))
-        
-        btn_down = QPushButton("▼")
-        btn_down.setStyleSheet(arrow_style)
-        btn_down.setToolTip("Move down")
-        btn_down.setCursor(Qt.PointingHandCursor)
-        btn_down.clicked.connect(lambda checked=False, p=path: self.move_file_down(p))
-        
-        arrow_container = QWidget()
-        arrow_container.setFixedWidth(30)
-        arrow_layout = QVBoxLayout(arrow_container)
-        arrow_layout.setContentsMargins(0, 0, 0, 0)
-        arrow_layout.setSpacing(2)
-        arrow_layout.addWidget(btn_up)
-        arrow_layout.addWidget(btn_down)
-        
-        # Role Badge (Main / Ref1 / Ref2 / Ref3)
-        lbl_role = QLabel("")
-        lbl_role.setFixedWidth(60)
-        lbl_role.setAlignment(Qt.AlignCenter)
-        lbl_role.setStyleSheet("""
-            QLabel {
-                background-color: #555;
-                color: #FFF;
-                border-radius: 4px;
-                padding: 4px 6px;
-                font-size: 11px;
-                font-weight: bold;
-            }
+        if not self.current_soa_path and path == self.files[0]:
+            self.current_soa_path = path
+
+        # Custom Radio-style logic (Role Selection)
+        radio_soa = QRadioButton()
+        radio_soa.setFixedSize(24, 24)
+        radio_soa.setCursor(Qt.PointingHandCursor)
+        radio_soa.setChecked(path == self.current_soa_path)
+        radio_soa.toggled.connect(lambda checked, p=path: self.toggle_soa_file(p) if checked else None)
+        radio_soa.setStyleSheet("""
+            QRadioButton::indicator { width: 18px; height: 18px; border-radius: 9px; }
+            QRadioButton::indicator:unchecked { border: 2px solid #9E9E9E; background: transparent; }
+            QRadioButton::indicator:checked { border: 2px solid #4CAF50; background: #4CAF50; }
         """)
+        
+        # Date Selection (for SOA only)
+        lbl_date = QLabel("Date:")
+        lbl_date.setObjectName("SubTitle")
+        lbl_date.setStyleSheet("font-size: 10px; margin-bottom: 0px;")
+        combo_date = QComboBox()
+        combo_date.setMinimumWidth(120)
+
+        # Amount Selection (for SOA only)
+        lbl_amount = QLabel("Amount:")
+        lbl_amount.setObjectName("SubTitle")
+        lbl_amount.setStyleSheet("font-size: 10px; margin-bottom: 0px;")
+        combo_amount = QComboBox()
+        combo_amount.setMinimumWidth(120)
+
+        # Load Columns for Date/Amount
+        try:
+            from app.core.data_loader import DataLoader
+            cols = DataLoader.load_file_headers(path)
+            combo_date.addItems(cols)
+            combo_amount.addItems(cols)
+        except Exception as e:
+            print(f"Error loading columns for {path}: {e}")
+
+        # SOA Config Container
+        soa_config_container = QWidget()
+        soa_config_container.setVisible(path == self.current_soa_path)
+        soa_config_layout = QHBoxLayout(soa_config_container)
+        soa_config_layout.setContentsMargins(0, 0, 0, 0)
+        soa_config_layout.setSpacing(6)
+        
+        date_v_layout = QVBoxLayout()
+        date_v_layout.setSpacing(2)
+        date_v_layout.addWidget(lbl_date)
+        date_v_layout.addWidget(combo_date)
+        
+        amount_v_layout = QVBoxLayout()
+        amount_v_layout.setSpacing(2)
+        amount_v_layout.addWidget(lbl_amount)
+        amount_v_layout.addWidget(combo_amount)
+        
+        soa_config_layout.addLayout(date_v_layout)
+        soa_config_layout.addLayout(amount_v_layout)
+
+        # Custom Display Name (editable)
+        edit_name = QLineEdit()
+        edit_name.setPlaceholderText("Name")
+        edit_name.setFixedWidth(120)
+        # Style handles font and padding, colors come from QSS
+        edit_name.setStyleSheet("QLineEdit { font-size: 12px; font-weight: bold; padding: 6px 8px; }")
+        if path in self.ref_custom_names:
+            edit_name.setText(self.ref_custom_names[path])
+        edit_name.textChanged.connect(lambda text, p=path: self._on_custom_name_changed(p, text))
         
         # File Info Layout
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
-        
-        # Filename
         lbl_name = QLabel(os.path.basename(path))
-        lbl_name.setStyleSheet("font-size: 15px; font-weight: bold; color: #FFFFFF;")
+        # Remove hardcoded white color
+        lbl_name.setStyleSheet("font-size: 14px; font-weight: bold;")
         info_layout.addWidget(lbl_name)
         
-        # File Details (Size, Ext)
         try:
             size_bytes = os.path.getsize(path)
             size_str = self.human_readable_size(size_bytes)
         except:
             size_str = "Unknown size"
-            
         ext = os.path.splitext(path)[1].upper().replace(".", "")
         lbl_details = QLabel(f"{ext} File • {size_str}")
-        lbl_details.setStyleSheet("font-size: 12px; color: #AAAAAA;")
+        lbl_details.setObjectName("SubTitle")
+        lbl_details.setStyleSheet("font-size: 11px;")
         info_layout.addWidget(lbl_details)
 
         # Match Key Selection
         lbl_key = QLabel("Match Key / Join Column:")
-        lbl_key.setStyleSheet("color: #AAAAAA; font-size: 10px;")
-
+        lbl_key.setObjectName("SubTitle")
+        lbl_key.setStyleSheet("font-size: 10px;")
         combo_key = QComboBox()
-        combo_key.setMinimumWidth(150)
-        combo_key.setStyleSheet("""
-            QComboBox {
-                background-color: #2b2b2b;
-                color: #e0e0e0;
-                border: 1px solid #555;
-                border-radius: 3px;
-                padding: 2px;
-            }
-        """)
-        
-        # Load Columns for Combobox
+        combo_key.setMinimumWidth(140)
+        # No hardcoded colors — inherit from QSS theme
         try:
             from app.core.data_loader import DataLoader
             cols = DataLoader.load_file_headers(path)
@@ -333,74 +314,57 @@ class SOAFileSelectScreen(QWidget):
         except Exception as e:
             print(f"Error loading columns for {path}: {e}")
 
-        # Store combo reference and role label in item for retrieval
+        # Store widget references in item for retrieval
         item.setData(Qt.UserRole + 1, combo_key)
-        item.setData(Qt.UserRole + 2, lbl_role)
+        item.setData(Qt.UserRole + 3, edit_name)
+        item.setData(Qt.UserRole + 4, radio_soa)
+        item.setData(Qt.UserRole + 5, soa_config_container)
+        item.setData(Qt.UserRole + 6, combo_date)
+        item.setData(Qt.UserRole + 7, combo_amount)
         
         # Configure Button
         btn_config = QPushButton("⚙ Configure Columns")
         btn_config.setToolTip("Select specific columns to use (Pivot Style)")
         btn_config.setCursor(Qt.PointingHandCursor)
-        
-        # Check if this path already has column config (restore green state)
         if path in self.file_column_config:
             count = len(self.file_column_config[path])
             btn_config.setText(f"✔ Configured ({count} cols)")
-            btn_config.setStyleSheet("""
-                QPushButton {
-                    background-color: #2e7d32; 
-                    color: white; 
-                    border: none; 
-                    padding: 6px 12px; 
-                    border-radius: 4px;
-                }
-                QPushButton:hover { background-color: #388e3c; }
-            """)
+            btn_config.setStyleSheet("QPushButton { background-color: #2e7d32; color: white; border: none; padding: 6px 12px; border-radius: 4px; } QPushButton:hover { background-color: #388e3c; }")
         else:
-            btn_config.setStyleSheet("""
-                QPushButton {
-                    background-color: #3f51b5; 
-                    color: white; 
-                    border: none; 
-                    padding: 6px 12px; 
-                    border-radius: 4px;
-                }
-                QPushButton:hover { background-color: #5c6bc0; }
-            """)
-        
+            btn_config.setStyleSheet("QPushButton { background-color: #3f51b5; color: white; border: none; padding: 6px 12px; border-radius: 4px; } QPushButton:hover { background-color: #5c6bc0; }")
         btn_config.clicked.connect(lambda checked=False, p=path, b=btn_config: self.open_column_config(p, b))
         
-        # Match Key Container
-        match_key_container = QWidget()
-        match_key_container.setFixedWidth(250)
-        match_key_layout = QVBoxLayout(match_key_container)
-        match_key_layout.setContentsMargins(0, 0, 0, 0)
-        match_key_layout.setSpacing(4)
-        match_key_layout.addWidget(lbl_key)
-        match_key_layout.addWidget(combo_key)
-        
-        # Layout: [ ▲▼ ] [ Role Badge ] [ File Info (Stretch) ] [ Match Key ] [ Config Button ]
-        layout.addWidget(arrow_container)
-        layout.addSpacing(6)
-        layout.addWidget(lbl_role)
+        # Layout Assembly
+        layout.addWidget(radio_soa)
+        layout.addSpacing(15)
+        layout.addWidget(edit_name)
         layout.addSpacing(10)
         layout.addLayout(info_layout, 1)
-        layout.addSpacing(20)
-        layout.addWidget(match_key_container)
-        layout.addSpacing(20)
+        layout.addSpacing(15)
+        layout.addWidget(soa_config_container)
+        layout.addSpacing(15)
+        
+        match_key_layout_v = QVBoxLayout()
+        match_key_layout_v.setSpacing(2)
+        match_key_layout_v.addWidget(lbl_key)
+        match_key_layout_v.addWidget(combo_key)
+        layout.addLayout(match_key_layout_v)
+        
+        layout.addSpacing(15)
         layout.addWidget(btn_config)
         
-        # Row Height
         widget.setLayout(layout)
         item.setSizeHint(widget.sizeHint() +  PySide6.QtCore.QSize(0, 10))
-        if item.sizeHint().height() < 70:
-            item.setSizeHint(PySide6.QtCore.QSize(item.sizeHint().width(), 70))
+        if item.sizeHint().height() < 80:
+            item.setSizeHint(PySide6.QtCore.QSize(item.sizeHint().width(), 80))
         
-        # Set Widget
         self.file_list.setItemWidget(item, widget)
         item.setData(Qt.UserRole, path)
         
-        # Update all role labels after adding
+        # Special logic for auto-detecting SOA columns
+        if path == self.current_soa_path:
+            self._auto_select_columns_for_path(path, combo_date, combo_amount)
+        
         self.update_role_labels()
 
     def human_readable_size(self, size, decimal_places=1):
@@ -470,129 +434,95 @@ class SOAFileSelectScreen(QWidget):
             path = item.data(Qt.UserRole)
             if path in self.files:
                 self.files.remove(path)
-            self.update_base_combo()
+            if path == self.current_soa_path:
+                self.current_soa_path = self.files[0] if self.files else None
+            self.rebuild_file_list()
 
-    def update_role_labels(self):
-        """Update the role badges (Main ★, Ref1, Ref2...) based on current base file."""
-        base_path = self.combo_base.currentData()
-        ref_counter = 1
+    def _on_custom_name_changed(self, path, text):
+        """Store custom name when user edits it."""
+        text = text.strip()
+        if text:
+            self.ref_custom_names[path] = text
+        elif path in self.ref_custom_names:
+            del self.ref_custom_names[path]
+
+    def toggle_soa_file(self, path):
+        """Designate a file as the SOA (Base) file and update UI."""
+        self.current_soa_path = path
         
+        # Update all row widgets
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            lbl_role = item.data(Qt.UserRole + 2)
-            path = item.data(Qt.UserRole)
+            p = item.data(Qt.UserRole)
+            btn_role = item.data(Qt.UserRole + 4)
+            soa_container = item.data(Qt.UserRole + 5)
             
-            if not lbl_role:
-                continue
+            if btn_role:
+                # Standard QRadioButton handles its own check state via mutually exclusive signals
+                # but we need to ensure consistency if we set it programmatically
+                btn_role.blockSignals(True)
+                btn_role.setChecked(p == path)
+                btn_role.blockSignals(False)
             
-            if path == base_path:
-                lbl_role.setText("★ Main")
-                lbl_role.setStyleSheet("""
-                    QLabel {
-                        background-color: #1565C0;
-                        color: #FFFFFF;
-                        border-radius: 4px;
-                        padding: 4px 6px;
-                        font-size: 11px;
-                        font-weight: bold;
-                    }
-                """)
+            if p == path:
+                if soa_container: soa_container.setVisible(True)
+                # Ensure columns are auto-detected for the new SOA
+                combo_date = item.data(Qt.UserRole + 6)
+                combo_amount = item.data(Qt.UserRole + 7)
+                if combo_date and combo_amount:
+                    self._auto_select_columns_for_path(p, combo_date, combo_amount)
             else:
-                lbl_role.setText(f"Ref{ref_counter}")
-                lbl_role.setStyleSheet("""
-                    QLabel {
-                        background-color: #E65100;
-                        color: #FFFFFF;
-                        border-radius: 4px;
-                        padding: 4px 6px;
-                        font-size: 11px;
-                        font-weight: bold;
-                    }
-                """)
+                if soa_container: soa_container.setVisible(False)
+        
+        self.update_role_labels()
+
+    def update_role_labels(self):
+        """Update the custom name defaults based on current SOA file."""
+        ref_counter = 1
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            edit_name = item.data(Qt.UserRole + 3)
+            path = item.data(Qt.UserRole)
+            if not edit_name: continue
+            
+            if path == self.current_soa_path:
+                if not edit_name.text().strip():
+                    edit_name.setPlaceholderText("SOA")
+            else:
+                default_name = f"Ref{ref_counter}"
+                if not edit_name.text().strip():
+                    edit_name.setPlaceholderText(default_name)
                 ref_counter += 1
 
-    def update_base_combo(self):
-        current_base = self.combo_base.currentText()
-        self.combo_base.blockSignals(True)
-        self.combo_base.clear()
-        for path in self.files:
-            self.combo_base.addItem(os.path.basename(path), path)
-        
-        # Restore selection if possible
-        index = self.combo_base.findText(current_base)
-        if index >= 0:
-            self.combo_base.setCurrentIndex(index)
-        elif self.combo_base.count() > 0:
-             self.combo_base.setCurrentIndex(0)
-             
-        self.combo_base.blockSignals(False)
-        self.on_base_file_changed()
-
-    def on_base_file_changed(self):
-        """Load columns for the selected base file into Date/Amount dropdowns."""
-        # Update role badges whenever base changes
-        self.update_role_labels()
-        
-        base_path = self.combo_base.currentData()
-        if not base_path:
-            self.combo_date.clear()
-            self.combo_amount.clear()
-            return
-            
+    def _auto_select_columns_for_path(self, path, combo_date, combo_amount):
+        """Fuzzy match date and amount columns for a specific file."""
         try:
             from app.core.data_loader import DataLoader
-            cols = DataLoader.load_file_headers(base_path)
+            cols = DataLoader.load_file_headers(path)
             
-            # Populate Date
-            self.combo_date.clear()
-            self.combo_date.addItems(cols)
+            date_keywords = ['date', 'dt', 'dated', 'invoice date', 'inv date', 'receive date']
+            for i, col in enumerate(cols):
+                if any(k in col.lower() for k in date_keywords):
+                    combo_date.setCurrentIndex(i)
+                    break
             
-            # Populate Amount
-            self.combo_amount.clear()
-            self.combo_amount.addItems(cols)
-            
-            # Auto-Detect
-            self._auto_select_columns(cols)
-            
-        except Exception as e:
-            print(f"Error loading base columns: {e}")
-
-    def _auto_select_columns(self, columns):
-        """Helper to fuzzy match date and amount columns."""
-        # Date Keywords
-        date_keywords = ['date', 'dt', 'dated', 'invoice date', 'inv date', 'receive date']
-        best_date_idx = -1
-        # Simple containment check
-        for i, col in enumerate(columns):
-            if any(k in col.lower() for k in date_keywords):
-                best_date_idx = i
-                break # Take first match
-        
-        if best_date_idx >= 0:
-            self.combo_date.setCurrentIndex(best_date_idx)
-            
-        # Amount Keywords
-        amount_keywords = ['amount', 'amt', 'open amount', 'invoice amount', 'total', 'value', 'balance']
-        best_amt_idx = -1
-        for i, col in enumerate(columns):
-            if any(k in col.lower() for k in amount_keywords):
-                best_amt_idx = i
-                break
-                
-        if best_amt_idx >= 0:
-            self.combo_amount.setCurrentIndex(best_amt_idx)
-
-    # set_mode removed as this class is now strictly SOA
+            amount_keywords = ['amount', 'amt', 'open amount', 'invoice amount', 'total', 'value', 'balance']
+            for i, col in enumerate(cols):
+                if any(k in col.lower() for k in amount_keywords):
+                    combo_amount.setCurrentIndex(i)
+                    break
+        except:
+            pass
 
     def on_run_click(self):
-        """Gather configuration and run immediately."""
+        """Gather current UI configuration and emit run signal directly."""
         if not self.files:
             QMessageBox.warning(self, "No Files", "Please add at least one file.")
             return
         
-        base_path = self.combo_base.currentData()
+        base_path = self.current_soa_path
         if not base_path:
-             QMessageBox.warning(self, "No Base File", "Please select a Base file.")
+             QMessageBox.warning(self, "No SOA File", "Please designate one file as 'SOA'.")
              return
 
         ref_files = [f for f in self.files if f != base_path]
@@ -600,119 +530,104 @@ class SOAFileSelectScreen(QWidget):
             QMessageBox.warning(self, "No Reference Files", "Please add at least one reference file.")
             return
 
-        # Gather Match Keys
+        # Gather Match Keys/Date/Amount from Rows
         match_keys = {}
         base_match_key = None
+        date_col = None
+        amount_col = None
         
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
             path = item.data(Qt.UserRole)
-            
-            # We do NOT skip base path anymore, because we need its match key for 'master_match_col'
-            # if path == base_path: continue 
-
             combo_key = item.data(Qt.UserRole + 1)
             
             if path and combo_key:
-                selected_key = combo_key.currentText()
-                if not selected_key:
-                        QMessageBox.warning(self, "Missing Key", f"Please select a Match Key for {os.path.basename(path)}")
-                        return
-                match_keys[path] = selected_key
-                
+                val = combo_key.currentText()
+                if not val:
+                    QMessageBox.warning(self, "Missing Key", f"Match key missing for {os.path.basename(path)}")
+                    return
+                match_keys[path] = val
                 if path == base_path:
-                    base_match_key = selected_key
-        
-        if not base_match_key:
-             # Fallback: If base file not in list (shouldn't happen) or key empty
-             QMessageBox.warning(self, "Missing Base Key", "Could not identify match key for Base File.")
-             return
-        
-        # Get Date/Amount
-        date_col = self.combo_date.currentText()
-        amount_col = self.combo_amount.currentText()
-        
-        if not date_col or not amount_col:
-             QMessageBox.warning(self, "Missing Columns", "Please select valid Date and Amount columns.")
+                    base_match_key = val
+                    combo_date = item.data(Qt.UserRole + 6)
+                    combo_amount = item.data(Qt.UserRole + 7)
+                    if combo_date and combo_amount:
+                        date_col = combo_date.currentText()
+                        amount_col = combo_amount.currentText()
+
+        if not base_match_key or not date_col or not amount_col:
+             QMessageBox.warning(self, "Incomplete Config", "Please check SOA match, date, and amount columns.")
              return
 
         # Build Rules
         rules = {}
         try:
             from app.core.data_loader import DataLoader
-            
             for ref_path in ref_files:
                 match_col = match_keys.get(ref_path)
-                if not match_col:
-                    QMessageBox.warning(self, "Missing Key", f"Match key missing for {os.path.basename(ref_path)}")
-                    return
-                
-                # Determine Return Columns
-                if ref_path in self.file_column_config:
-                    # User configured specific columns
-                    all_cols = self.file_column_config[ref_path]
-                else:
-                    # Default: All columns
-                    all_cols = DataLoader.load_file_headers(ref_path)
-                
-                # Include ALL columns (match key is mandatory in output)
-                return_cols = list(all_cols)
-                
-                rules[ref_path] = {
-                    "match_col": match_col,
-                    "return_cols": return_cols,
-                    "match_type": "exact" # Default for quick run
-                }
-                
+                return_cols = list(self.file_column_config.get(ref_path, DataLoader.load_file_headers(ref_path)))
+                rules[ref_path] = {"match_col": match_col, "return_cols": return_cols, "match_type": "exact"}
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to prepare configuration: {e}")
             return
 
-        # Construct Config
+        # Ref Custom Names
+        ref_custom_names = {}
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            path = item.data(Qt.UserRole)
+            edit_name = item.data(Qt.UserRole + 3)
+            if path and edit_name:
+                name = edit_name.text().strip() or edit_name.placeholderText()
+                ref_custom_names[path] = name
+
         config = {
-            "rules": rules,
-            "date_col": date_col,
-            "amount_col": amount_col,
-            "master_match_col": base_match_key,
-            "schema_config": [],
-            "match_keys": match_keys,
-            "base_file": base_path,
-            "column_config": self.file_column_config
+            "rules": rules, "date_col": date_col, "amount_col": amount_col,
+            "master_match_col": base_match_key, "schema_config": [], "match_keys": match_keys,
+            "base_file": base_path, "column_config": self.file_column_config, "ref_custom_names": ref_custom_names
         }
-        
-        # Emit Signal
         self.run_reconciliation_now.emit(config)
 
-    def on_next(self):
+    def on_advanced_mapping(self):
+        """Prepare data and switch to the advanced schema mapper."""
         if not self.files:
             QMessageBox.warning(self, "No Files", "Please add at least one file.")
             return
-        
-        base_path = self.combo_base.currentData()
+        base_path = self.current_soa_path
         if not base_path:
-             QMessageBox.warning(self, "No Base File", "Please select a Base file.")
+             QMessageBox.warning(self, "No SOA File", "Please designate one file as 'SOA'.")
              return
-
-        # Ref files are all except base
+        
         ref_files = [f for f in self.files if f != base_path]
-        
-        # Collect Match Keys (For SOA now)
-        match_keys = {} # {file_path: selected_column}
-        
+        match_keys = {}
+        date_col = None
+        amount_col = None
+
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
             path = item.data(Qt.UserRole)
             combo_key = item.data(Qt.UserRole + 1)
-            
             if path and combo_key:
-                selected_key = combo_key.currentText()
-                if not selected_key:
-                        QMessageBox.warning(self, "Missing Key", f"Please select a Match Key for {os.path.basename(path)}")
-                        return
-                match_keys[path] = selected_key
-        
-        # Get Date/Amount
-        date_col = self.combo_date.currentText()
-        amount_col = self.combo_amount.currentText()
+                val = combo_key.currentText()
+                if not val:
+                    QMessageBox.warning(self, "Missing Key", f"Match key missing for {os.path.basename(path)}")
+                    return
+                match_keys[path] = val
+                if path == base_path:
+                    combo_date = item.data(Qt.UserRole + 6)
+                    combo_amount = item.data(Qt.UserRole + 7)
+                    if combo_date and combo_amount:
+                        date_col = combo_date.currentText()
+                        amount_col = combo_amount.currentText()
 
-        self.proceed_to_mapping.emit(base_path, ref_files, self.file_column_config, match_keys, date_col, amount_col)
+        # Ref Custom Names
+        ref_custom_names = {}
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            path = item.data(Qt.UserRole)
+            edit_name = item.data(Qt.UserRole + 3) # Custom name edit field
+            if path and edit_name:
+                name = edit_name.text().strip() or edit_name.placeholderText()
+                ref_custom_names[path] = name
+
+        self.proceed_to_advanced_mapping.emit(base_path, ref_files, self.file_column_config, match_keys, date_col, amount_col, ref_custom_names)

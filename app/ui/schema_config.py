@@ -31,10 +31,11 @@ class SchemaConfigWidget(QWidget):
     """
     Reusable widget for defining a comparison schema.
     """
-    def __init__(self, ref_files, ref_columns, initial_schema=None, parent=None):
+    def __init__(self, ref_files, ref_columns, initial_schema=None, parent=None, path_to_name_map=None):
         super().__init__(parent)
         self.ref_files = ref_files
         self.ref_columns = ref_columns
+        self.path_to_name_map = path_to_name_map or {}
         self.schema = initial_schema if initial_schema else []
         self.init_ui()
 
@@ -52,7 +53,8 @@ class SchemaConfigWidget(QWidget):
         lbl_inst = QLabel(
             "Map 'Output Fields' to columns in each file. These fields will be compared across all files."
         )
-        lbl_inst.setStyleSheet("color: #AAAAAA; margin-bottom: 5px;")
+        lbl_inst.setObjectName("SubTitle")
+        lbl_inst.setStyleSheet("font-size: 11px;")
         layout.addWidget(lbl_inst)
         
         # Table
@@ -62,18 +64,7 @@ class SchemaConfigWidget(QWidget):
         
         # Styles
         self.table.verticalHeader().setDefaultSectionSize(40)
-        self.setStyleSheet("""
-            QTableWidget { gridline-color: #444; }
-            QComboBox, QLineEdit {
-                min-height: 25px; padding: 2px 5px; margin: 2px;
-                border: 1px solid #555; border-radius: 3px;
-                background-color: #2b2b2b; color: #e0e0e0;
-            }
-            QComboBox::drop-down { border: none; }
-            QHeaderView::section {
-                background-color: #333; padding: 5px; border: 1px solid #444;
-            }
-        """)
+        # Widget-specific hardcoded overrides removed. Handled by global QSS.
         
         # Actions
         btn_layout = QHBoxLayout()
@@ -91,11 +82,16 @@ class SchemaConfigWidget(QWidget):
         self.refresh_structure()
 
     def refresh_structure(self):
-        """Re-builds table headers based on current ref_files."""
+        """Re-builds table headers based on current ref_files and path_to_name_map."""
         self.table.clear() 
         self.table.setRowCount(0)
         
-        self.file_headers = [os.path.basename(f) for f in self.ref_files]
+        self.file_headers = []
+        for f in self.ref_files:
+            # Use custom name from map if available, otherwise fallback to basename
+            name = self.path_to_name_map.get(f, os.path.basename(f))
+            self.file_headers.append(name)
+            
         headers = self.file_headers + ["Data Type", "Output Field Name"]
         
         self.table.setColumnCount(len(headers))

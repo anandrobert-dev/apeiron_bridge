@@ -14,12 +14,12 @@ class SOAEngine:
         ref_configs: List of tuples (ref_df, match_col, return_cols, ref_name)
         kwargs: schema_config, path_mapping (for multi-file schema comparison)
         """
-        self.soa_df = soa_df.copy()
+        self.soa_df = soa_df
         self.soa_match = soa_match_col
         self.date_col = date_col
         self.amount_col = amount_col
-        self.ref_configs = ref_configs # List of (df, match_col, return_cols, ref_name)
-        self.mode = mode # "SOA" or "MULTI"
+        self.ref_configs = ref_configs
+        self.mode = mode
         self.schema_config = kwargs.get("schema_config", [])
         self.path_mapping = kwargs.get("path_mapping", {})
         
@@ -27,6 +27,19 @@ class SOAEngine:
         self.errors = []
         self.results_dir = os.path.join(os.getcwd(), "reconciliation_results")
         os.makedirs(self.results_dir, exist_ok=True)
+        
+        # Performance: progress callback and cancellation support
+        self._progress_callback = None  # Set by worker: fn(pct, msg)
+        self._cancel_check = None       # Set by worker: fn() -> bool
+
+    def _report_progress(self, pct, msg):
+        """Report progress if callback is set."""
+        if self._progress_callback:
+            self._progress_callback(pct, msg)
+
+    def _is_cancelled(self):
+        """Check if operation should be cancelled."""
+        return self._cancel_check() if self._cancel_check else False
 
     def log(self, msg):
         print(f"[SOAEngine] {msg}")
@@ -35,10 +48,13 @@ class SOAEngine:
     def run(self):
         """
         Executes the reconciliation logic.
-        Returns: (df_result, excel_filename)
+        Returns: (df_result, excel_filename, df_disc, df_schema, insights)
         """
         df_result = self.soa_df.copy()
         df_schema_report = pd.DataFrame()
+        insights = {}
+        
+        self._report_progress(10, "Preparing data...")
         
         # Helper: Clean function
         def clean_match_value(val):
@@ -67,8 +83,7 @@ class SOAEngine:
 
                 def bucket(days):
                     if pd.isna(days): return "Unknown"
-                    elif days <= 15: return "0-15"
-                    elif days <= 30: return "16-30"
+                    elif days <= 30: return "0-30"
                     elif days <= 60: return "31-60"
                     elif days <= 90: return "61-90"
                     elif days <= 120: return "91-120"
@@ -86,6 +101,8 @@ class SOAEngine:
         # Clean SOA match column
         soa_clean_col = f"_clean_{self.soa_match}"
         df_result[soa_clean_col] = df_result[self.soa_match].astype(str).apply(clean_match_value)
+        
+        self._report_progress(15, "Matching references...")
         
         # Track duplicate counts per ref for the Duplicate Summary column
         duplicate_counts = {}
@@ -172,17 +189,18 @@ class SOAEngine:
                 ref_clean_col = f"_clean_{ref_name}_{ref_match_col}"
                 ref_subset[ref_clean_col] = ref_subset[ref_match_col].astype(str).apply(clean_match_value)
                 
-                # --- DEEP ANALYSIS: Collect Amounts ---
-                for _, row in ref_subset.iterrows():
-                    key = row[ref_clean_col]
-                    if ref_amount_col:
-                        amt = self._to_float(row[ref_amount_col])
-                        if amt is not None:
-                            all_ref_entries.append({
-                                "key": key,
-                                "amount": amt,
-                                "source": ref_name
-                            })
+                # --- DEEP ANALYSIS: Collect Amounts (VECTORIZED) ---
+                if ref_amount_col:
+                    amt_series = ref_subset[ref_amount_col].apply(self._to_float)
+                    valid_mask = amt_series.notna()
+                    if valid_mask.any():
+                        keys = ref_subset.loc[valid_mask, ref_clean_col].values
+                        amounts = amt_series[valid_mask].values
+                        new_entries = [
+                            {"key": k, "amount": a, "source": ref_name}
+                            for k, a in zip(keys, amounts)
+                        ]
+                        all_ref_entries.extend(new_entries)
 
                 # --- MERGE LOGIC: OUTER JOIN ---
                 # Request: "missing in SOA" -> We need invoices in Ref but not in SOA.
@@ -291,18 +309,17 @@ class SOAEngine:
                 except: pass
 
         # ==================================================================================
-        # --- 7. DEEP ANALYSIS: Vectorized Discrepancy Calculation ---
+        # --- 7. DEEP ANALYSIS: Per-Ref Discrepancy Calculation ---
         # ==================================================================================
+        self._report_progress(50, "Computing discrepancies...")
         df_discrepancy = pd.DataFrame()
         
         if self.amount_col and self.amount_col in self.soa_df.columns:
-            # A. Aggregate SOA
+            # A. Aggregate SOA amounts per key
             soa_agg_df = self.soa_df.copy()
-            # Must clean keys again from source (since we modified df_result but better safe)
             soa_clean_key_temp = f"_clean_key_{self.soa_match}"
             soa_agg_df[soa_clean_key_temp] = soa_agg_df[self.soa_match].astype(str).apply(clean_match_value)
             
-            # Helper to clean amount for summing
             def clean_amt(x):
                 f = self._to_float(x)
                 return f if f is not None else 0.0
@@ -313,118 +330,159 @@ class SOAEngine:
                 Total_SOA_Amount=('__amt__', 'sum')
             ).reset_index().rename(columns={soa_clean_key_temp: 'key'})
 
-            # B. Aggregate Refs
+            # B. Aggregate Refs PER SOURCE (not summed across all refs)
             df_ref_agg = pd.DataFrame(all_ref_entries)
-            if not df_ref_agg.empty:
-                grouped_ref = df_ref_agg.groupby('key').agg(
-                    Total_Ref_Amount=('amount', 'sum'),
-                    Ref_Sources=('source', lambda x: ', '.join(sorted(set(x)))),
-                    Ref_Count=('source', 'count')
-                ).reset_index()
-            else:
-                grouped_ref = pd.DataFrame(columns=['key', 'Total_Ref_Amount', 'Ref_Sources', 'Ref_Count'])
-
-            # C. Merge (Left for SOA, Outer for MULTI)
-            merge_how = 'left' if self.mode == "SOA" else 'outer'
-            df_merged = pd.merge(grouped_soa, grouped_ref, on='key', how=merge_how)
             
             # Label adjustment
             base_label = "SOA Amount" if self.mode == "SOA" else "Master Amount"
             invoice_label = "Invoice #" if self.mode == "SOA" else "ID / Key"
-            df_merged['Total_Ref_Amount'] = df_merged['Total_Ref_Amount'].fillna(0.0)
-            df_merged['Ref_Count'] = df_merged['Ref_Count'].fillna(0).astype(int)
-            df_merged['Ref_Sources'] = df_merged['Ref_Sources'].fillna('-')
             
-            # D. Calc Delta and Status
-            df_merged['Total_SOA_Amount'] = df_merged['Total_SOA_Amount'].round(2)
-            df_merged['Total_Ref_Amount'] = df_merged['Total_Ref_Amount'].round(2)
-            df_merged['Delta'] = (df_merged['Total_SOA_Amount'] - df_merged['Total_Ref_Amount']).round(2)
-            
-            def classify(row):
-                d = row['Delta']
-                s_amt = row['Total_SOA_Amount']
-                r_amt = row['Total_Ref_Amount']
-                
-                # Tolerance
-                if abs(d) < 0.01: return "MATCH"
-                
-                if s_amt == 0 and r_amt > 0: return "MISSING IN SOA"
-                if s_amt > 0 and r_amt == 0: return "MISSING IN REF"
-                
-                if d > 0: return "Underpaid (Short)"
-                else: return "Overpaid (Excess)"
-            
-            df_merged['Status'] = df_merged.apply(classify, axis=1)
-            
-            # Rename for display
-            df_discrepancy = df_merged.rename(columns={
+            # Start building discrepancy from SOA
+            df_discrepancy = grouped_soa.rename(columns={
                 'key': invoice_label,
-                'Total_SOA_Amount': base_label,
-                'Total_Ref_Amount': 'Ref Total'
+                'Total_SOA_Amount': base_label
             })
+            df_discrepancy[base_label] = df_discrepancy[base_label].round(2)
+            
+            # C. Build per-ref amount columns
+            ref_amount_cols = []  # Track column names for per-ref amounts
+            if not df_ref_agg.empty:
+                for ref_name in ref_names_ordered:
+                    ref_subset = df_ref_agg[df_ref_agg['source'] == ref_name]
+                    if ref_subset.empty:
+                        continue
+                    
+                    # Sum per key for this specific ref
+                    ref_grouped = ref_subset.groupby('key').agg(
+                        ref_amount=('amount', 'sum')
+                    ).reset_index()
+                    
+                    col_name = f"{ref_name} Amount"
+                    ref_amount_cols.append(col_name)
+                    ref_grouped = ref_grouped.rename(columns={
+                        'ref_amount': col_name,
+                        'key': invoice_label
+                    })
+                    ref_grouped[col_name] = ref_grouped[col_name].round(2)
+                    
+                    # Merge into discrepancy
+                    merge_how = 'left' if self.mode == "SOA" else 'outer'
+                    df_discrepancy = pd.merge(df_discrepancy, ref_grouped, on=invoice_label, how=merge_how)
+                
+                # Build Ref Sources column
+                ref_sources_agg = df_ref_agg.groupby('key').agg(
+                    Ref_Sources=('source', lambda x: ', '.join(sorted(set(x)))),
+                    Ref_Count=('source', 'count')
+                ).reset_index().rename(columns={'key': invoice_label})
+                df_discrepancy = pd.merge(df_discrepancy, ref_sources_agg, on=invoice_label, how='left')
+            
+            df_discrepancy['Ref_Sources'] = df_discrepancy.get('Ref_Sources', pd.Series(['-'] * len(df_discrepancy))).fillna('-')
+            df_discrepancy['Ref_Count'] = df_discrepancy.get('Ref_Count', pd.Series([0] * len(df_discrepancy))).fillna(0).astype(int)
+            
+            # D. Calculate Delta and Status (per-ref comparison)
+            def classify_per_ref(row):
+                soa_amt = row[base_label] if pd.notna(row[base_label]) else 0.0
+                
+                # Collect all present ref amounts
+                ref_amounts = {}
+                for col in ref_amount_cols:
+                    if col in row.index and pd.notna(row[col]):
+                        ref_amounts[col] = row[col]
+                
+                # No refs at all
+                if not ref_amounts:
+                    if abs(soa_amt) < 0.01:
+                        return 0.0, "NO DATA"
+                    else:
+                        return soa_amt, "MISSING IN REF"
+                
+                # SOA is zero/missing but refs have data
+                if abs(soa_amt) < 0.01 and any(abs(v) >= 0.01 for v in ref_amounts.values()):
+                    max_ref = max(abs(v) for v in ref_amounts.values())
+                    return -max_ref, "MISSING IN SOA"
+                
+                # Compare each ref against SOA
+                deltas = {col: round(soa_amt - amt, 2) for col, amt in ref_amounts.items()}
+                max_abs_delta = max(abs(d) for d in deltas.values())
+                
+                # All refs match SOA
+                if max_abs_delta < 0.01:
+                    if len(ref_amounts) < len(ref_amount_cols):
+                        return 0.0, "PARTIAL (Some Refs Missing)"
+                    return 0.0, "MATCH"
+                
+                # Some refs disagree
+                # Use the largest absolute deviation as the reported delta
+                worst_delta = max(deltas.values(), key=abs)
+                
+                if len(ref_amounts) < len(ref_amount_cols):
+                    # Some refs missing, some present disagree
+                    return worst_delta, "MISMATCH (Partial)"
+                
+                if worst_delta > 0:
+                    return worst_delta, "Underpaid (Short)"
+                else:
+                    return worst_delta, "Overpaid (Excess)"
+            
+            # Apply classification
+            results = df_discrepancy.apply(classify_per_ref, axis=1)
+            df_discrepancy['Delta'] = [r[0] for r in results]
+            df_discrepancy['Status'] = [r[1] for r in results]
             
             # --- FIELD-LEVEL COMPARISON ---
-            if comparable_fields and all_ref_field_entries:
-                df_ref_fields = pd.DataFrame(all_ref_field_entries)
+            if self.mode == "SOA":
+                def compare_fields(row):
+                    mismatches = []
+                    partial_matches = []
+                    
+                    # Check Delta first
+                    if abs(row.get('Delta', 0)) >= 0.01:
+                        mismatches.append('Amount')
+
+                    # Map lowercase SOA column names to their exact casing
+                    soa_cols_lower = {str(c).lower().strip(): c for c in self.soa_df.columns}
+                    
+                    for config in self.ref_configs:
+                        if not config: continue
+                        _, ref_match_col, return_cols, ref_name = config
+                        
+                        for ref_col in return_cols:
+                            # Does this ref col have a matching SOA col?
+                            ref_col_lower = str(ref_col).lower().strip()
+                            if ref_col_lower in soa_cols_lower and ref_col_lower != str(ref_match_col).lower().strip():
+                                soa_target_col = soa_cols_lower[ref_col_lower]
+                                ref_target_col = f"{ref_name}_{ref_col}"
+                                
+                                if soa_target_col in row.index and ref_target_col in row.index:
+                                    soa_val = str(row[soa_target_col]).strip().lower() if pd.notna(row[soa_target_col]) else ""
+                                    ref_val = str(row[ref_target_col]).strip().lower() if pd.notna(row[ref_target_col]) else ""
+                                    
+                                    # Clean up common empty string representations
+                                    soa_val = soa_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
+                                    ref_val = ref_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
+                                    
+                                    if soa_val and ref_val and soa_val != ref_val:
+                                        # Check for partial match logic (e.g. CARDINAL vs CARDINAL LOGISTICS)
+                                        if ref_val in soa_val or soa_val in ref_val:
+                                            if soa_target_col not in partial_matches:
+                                                partial_matches.append(soa_target_col)
+                                        else:
+                                            if soa_target_col not in mismatches:
+                                                mismatches.append(soa_target_col)
+                                            
+                    result_parts = []
+                    if mismatches:
+                        result_parts.append("Mismatch: " + ", ".join(mismatches))
+                    if partial_matches:
+                        result_parts.append("Partial: " + ", ".join(partial_matches))
+                    
+                    return " | ".join(result_parts) if result_parts else "✓ All Match"
                 
-                # For each invoice key, take the first ref entry's field values
-                # (if multiples, use first; they should be consistent per invoice)
-                if not df_ref_fields.empty:
-                    df_ref_first = df_ref_fields.groupby('key').first().reset_index()
-                    
-                    # Get SOA field values (first per key)
-                    soa_field_df = self.soa_df.copy()
-                    soa_clean_key_temp2 = '_ckey_'
-                    soa_field_df[soa_clean_key_temp2] = soa_field_df[self.soa_match].astype(str).apply(clean_match_value)
-                    soa_field_first = soa_field_df.groupby(soa_clean_key_temp2).first().reset_index()
-                    soa_field_first = soa_field_first.rename(columns={soa_clean_key_temp2: 'key'})
-                    
-                    # Add comparison columns to discrepancy report
-                    mismatched_fields_list = []
-                    
-                    for field_key, (soa_col, ref_col) in comparable_fields.items():
-                        ref_field_col = f"ref_{field_key}"
-                        soa_display = f"SOA {soa_col}"
-                        ref_display = f"Ref {ref_col}"
-                        
-                        # Merge SOA field values
-                        if soa_col in soa_field_first.columns:
-                            soa_vals = soa_field_first[['key', soa_col]].rename(columns={soa_col: soa_display})
-                            df_discrepancy = pd.merge(df_discrepancy, soa_vals, left_on='Invoice #', right_on='key', how='left')
-                            if 'key' in df_discrepancy.columns and 'Invoice #' in df_discrepancy.columns:
-                                df_discrepancy.drop(columns=['key'], inplace=True, errors='ignore')
-                        
-                        # Merge Ref field values
-                        if ref_field_col in df_ref_first.columns:
-                            ref_vals = df_ref_first[['key', ref_field_col]].rename(columns={ref_field_col: ref_display})
-                            df_discrepancy = pd.merge(df_discrepancy, ref_vals, left_on='Invoice #', right_on='key', how='left')
-                            if 'key' in df_discrepancy.columns and 'Invoice #' in df_discrepancy.columns:
-                                df_discrepancy.drop(columns=['key'], inplace=True, errors='ignore')
-                    
-                    # Build Mismatched Fields column
-                    def find_mismatches(row):
-                        mismatches = []
-                        for field_key, (soa_col, ref_col) in comparable_fields.items():
-                            soa_display = f"SOA {soa_col}"
-                            ref_display = f"Ref {ref_col}"
-                            if soa_display in row.index and ref_display in row.index:
-                                soa_val = str(row[soa_display]).strip().lower() if pd.notna(row[soa_display]) else ""
-                                ref_val = str(row[ref_display]).strip().lower() if pd.notna(row[ref_display]) else ""
-                                # Clean date strings for comparison
-                                soa_val = soa_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
-                                ref_val = ref_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
-                                if soa_val and ref_val and soa_val != ref_val:
-                                    mismatches.append(soa_col)
-                        # Also check amount
-                        if abs(row.get('Delta', 0)) >= 0.01:
-                            mismatches.append('Amount')
-                        return ', '.join(mismatches) if mismatches else '✓ All Match'
-                    
-                    df_discrepancy['Mismatched Fields'] = df_discrepancy.apply(find_mismatches, axis=1)
+                df_discrepancy['Mismatched Fields'] = df_discrepancy.apply(compare_fields, axis=1)
             
-            # Sort order: problems first, then matches
+            # Sort: problems first, then matches
             df_discrepancy['__sort__'] = df_discrepancy.apply(
-                lambda r: 0 if r.get('Mismatched Fields', '') != '✓ All Match' else 1, axis=1
+                lambda r: 0 if r.get('Mismatched Fields', '') != '✓ All Match' else (0 if r['Status'] != 'MATCH' else 1), axis=1
             )
             df_discrepancy.sort_values(by=['__sort__', 'Status', 'Delta'], inplace=True)
             df_discrepancy.drop(columns=['__sort__'], inplace=True)
@@ -432,8 +490,9 @@ class SOAEngine:
         # ==================================================================================
         # --- 8. SCHEMA COMPARISON / LOGICAL CHECKER (Multi-File Only) ---
         # ==================================================================================
+        self._report_progress(65, "Running schema comparison...")
         df_schema_report = pd.DataFrame()
-        if self.mode == "MULTI" and self.schema_config:
+        if self.schema_config: # Allow both SOA and MULTI modes to execute if user configured a Schema
             self.log("Running Schema Comparison Logic...")
             
             # Ensure labels are defined (might be skipped if amount_col is None)
@@ -445,7 +504,7 @@ class SOAEngine:
                 key_col = invoice_label  # "ID / Key"
                 # Find key in df_result (likely renamed or original)
                 # It's usually self.soa_match (but filled)
-                master_key_series = df_result[self.soa_match] if self.soa_match in df_result.columns else df_result.iloc[:, 0]
+                master_key_series = df_result[self.soa_match] if self.soa_match in df_result.columns else (df_result.iloc[:, 0] if not df_result.empty else pd.Series([]))
                 
                 schema_data = {key_col: master_key_series}
                 
@@ -465,7 +524,12 @@ class SOAEngine:
                         if not ref_name: continue
                         
                         # Look for column in df_result: {ref_name}_{col_name}
-                        target_col = f"{ref_name}_{col_name}"
+                        # Special Case: Base file (SOA) columns are usually not prefixed in df_result
+                        if (ref_name == "SOA" or ref_name == "Master") and col_name in df_result.columns:
+                            target_col = col_name
+                        else:
+                            target_col = f"{ref_name}_{col_name}"
+
                         if target_col in df_result.columns:
                             # Clean values based on type
                             raw_values = df_result[target_col].fillna("")
@@ -480,34 +544,52 @@ class SOAEngine:
                             values_per_ref[ref_name] = clean_values
                         else:
                             self.log(f"Schema Warning: Column {target_col} not found in result DF.")
+                            # Still add an empty series to values_per_ref to keep indices aligned
+                            values_per_ref[ref_name] = pd.Series([""] * len(df_result))
 
                     # 2. Compare Values (Row-wise)
                     # We need to construct a comparison status column
                     if values_per_ref:
                         status_list = []
-                        # Convert to DataFrame for easier row iteration
                         temp_df = pd.DataFrame(values_per_ref)
                         
                         for i, row in temp_df.iterrows():
                             # Filter empty/None values
-                            vals = [v for v in row.values if v not in [None, "", np.nan]]
+                            present_vals = {k: v for k, v in row.items() if v not in [None, "", np.nan]}
                             
-                            if not vals:
+                            if not present_vals:
                                 status_list.append("NO DATA")
+                                continue
+                            
+                            # Refined Status Logic (Phase 13)
+                            # 1. Missing Data Check
+                            if len(present_vals) < len(values_per_ref):
+                                status_list.append("MISSING DATA")
+                                continue
+                            
+                            # 2. All Data Present: Exact Match Check
+                            norm_set = set()
+                            for v in present_vals.values():
+                                if isinstance(v, (int, float)): 
+                                    norm_set.add(round(float(v), 2))
+                                else: 
+                                    norm_set.add(str(v).strip().upper())
+                            
+                            if len(norm_set) == 1:
+                                status_list.append("MATCH")
                             else:
-                                # Check uniqueness
-                                unique_vals = set()
-                                for v in vals:
-                                    if isinstance(v, float):
-                                        unique_vals.add(round(v, 2))
-                                    else:
-                                        unique_vals.add(str(v).upper())
+                                # Values disagree. Check for Partial Match (Substring logic, Text only)
+                                is_partial = False
+                                if field_type == "Text" and len(present_vals) >= 2:
+                                    strs = [str(v).strip().upper() for v in present_vals.values() if v]
+                                    if strs:
+                                        strs.sort(key=len, reverse=True)
+                                        longest = strs[0]
+                                        if all(s in longest for s in strs[1:]):
+                                            is_partial = True
                                 
-                                if len(unique_vals) == 1:
-                                    if len(vals) < len(values_per_ref):
-                                        status_list.append("PARTIAL MATCH") # Some refs missing data
-                                    else:
-                                        status_list.append("MATCH")
+                                if is_partial:
+                                    status_list.append("PARTIAL MATCH")
                                 else:
                                     status_list.append("MISMATCH")
                         
@@ -521,6 +603,7 @@ class SOAEngine:
                 traceback.print_exc()
 
         # --- 9. Excel Generation ---
+        self._report_progress(70, "Generating Excel output...")
         output_dir = os.path.join(os.path.expanduser("~"), "Downloads", "apeiron_output")
         os.makedirs(output_dir, exist_ok=True)
         filename = os.path.join(output_dir, f"soa_reco_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx")
@@ -593,9 +676,14 @@ class SOAEngine:
                     # Columns
                     cols = df_discrepancy.columns.tolist()
                     idx_soa = cols.index(base_label) if base_label in cols else -1
-                    idx_ref = cols.index('Ref Total') if 'Ref Total' in cols else -1
                     idx_delta = cols.index('Delta') if 'Delta' in cols else -1
                     idx_status = cols.index('Status') if 'Status' in cols else -1
+                    
+                    # Find per-ref amount column indices
+                    ref_amt_indices = []
+                    for col_name in cols:
+                        if col_name.endswith(' Amount') and col_name != base_label:
+                            ref_amt_indices.append(cols.index(col_name))
 
                     # Apply Header
                     for col_num, value in enumerate(cols):
@@ -607,7 +695,13 @@ class SOAEngine:
                         excel_row = row_idx + 1
                         if idx_soa != -1:
                             ws2.write(excel_row, idx_soa, row[base_label], fmt_currency)
-                        ws2.write(excel_row, idx_ref, row['Ref Total'], fmt_currency)
+                        
+                        # Format per-ref amount columns
+                        for ref_idx in ref_amt_indices:
+                            ref_col_name = cols[ref_idx]
+                            val = row[ref_col_name]
+                            if pd.notna(val):
+                                ws2.write(excel_row, ref_idx, val, fmt_currency)
                         
                         # Conditional Delta formatting
                         delta = row['Delta']
@@ -620,21 +714,175 @@ class SOAEngine:
                             
                         # Conditional Status formatting
                         status = row['Status']
-                        if "MISSING" in status or "Mismatch" in status or "Underpaid" in status or "Overpaid" in status:
+                        if "MISSING" in status or "MISMATCH" in status or "Underpaid" in status or "Overpaid" in status:
                              ws2.write(excel_row, idx_status, status, mismatch_format)
-                        else:
-                             ws2.write(excel_row, idx_status, status)
+                        elif "MATCH" in status:
+                             ws2.write(excel_row, idx_status, status, match_format)
+                        elif "PARTIAL" in status:
+                             ws2.write(excel_row, idx_status, status, partial_format)
                 
                 # Sheet 2 Layout - Column adjustment
                 if not df_discrepancy.empty:
                     ws2.set_column(0, len(cols)-1, 20)
 
+                # ==========================================
+                # SHEET 4: Reconciliation Insights
+                # ==========================================
+                self._report_progress(80, "Generating insights...")
+                try:
+                    from app.core.insights import ReconciliationInsights
+                    ref_names_list = [cfg[3] for cfg in self.ref_configs if cfg]
+                    analyzer = ReconciliationInsights(
+                        df_result, df_discrepancy, ref_names_list,
+                        amount_col=self.amount_col, date_col=self.date_col
+                    )
+                    insights = analyzer.generate_all()
+                    
+                    # Build Insights Summary Sheet
+                    summary = insights.get("summary", {})
+                    insights_rows = []
+                    insights_rows.append({"Metric": "═════ EXECUTIVE SUMMARY ═════", "Value": ""})
+                    insights_rows.append({"Metric": "Total Records Processed", "Value": summary.get("total_records", 0)})
+                    insights_rows.append({"Metric": "Match Rate", "Value": f"{summary.get('match_rate', 0)}%"})
+                    insights_rows.append({"Metric": "Matched Invoices", "Value": summary.get("match_count", 0)})
+                    insights_rows.append({"Metric": "Discrepancies Found", "Value": summary.get("discrepancy_count", 0)})
+                    insights_rows.append({"Metric": "Total Discrepancy Value", "Value": f"${summary.get('total_discrepancy_value', 0):,.2f}"})
+                    insights_rows.append({"Metric": "Average Discrepancy", "Value": f"${summary.get('avg_discrepancy', 0):,.2f}"})
+                    insights_rows.append({"Metric": "Maximum Discrepancy", "Value": f"${summary.get('max_discrepancy', 0):,.2f}"})
+                    insights_rows.append({"Metric": "Reconciliation Health Score", "Value": f"{summary.get('health_score', 0)}/100"})
+                    insights_rows.append({"Metric": "Reference Sources", "Value": summary.get("ref_count", 0)})
+                    insights_rows.append({"Metric": "Generated At", "Value": insights.get("generated_at", "")})
+                    
+                    # Data Summary (Per source match and sum)
+                    ds = summary.get("data_summary", [])
+                    if ds:
+                        insights_rows.append({"Metric": "", "Value": ""})
+                        insights_rows.append({"Metric": "═════ DATA SUMMARY ═════", "Value": ""})
+                        for d in ds:
+                            source = d.get("Source", "Unknown")
+                            val = d.get("Total Value", 0)
+                            inv = d.get("Total Invoices", 0)
+                            match_pct = d.get("Match Rate vs SOA", "0%")
+                            insights_rows.append({"Metric": f"  [{source}] Invoices", "Value": inv})
+                            insights_rows.append({"Metric": f"  [{source}] Value Sum", "Value": f"${val:,.2f}"})
+                            insights_rows.append({"Metric": f"  [{source}] Match Rate", "Value": match_pct})                    
+                    # Status Breakdown
+                    status_bd = summary.get("status_breakdown", {})
+                    if status_bd:
+                        insights_rows.append({"Metric": "", "Value": ""})
+                        insights_rows.append({"Metric": "═════ STATUS BREAKDOWN ═════", "Value": ""})
+                        for status, count in status_bd.items():
+                            insights_rows.append({"Metric": f"  {status}", "Value": count})
+                    
+                    # Patterns
+                    patterns = insights.get("patterns", [])
+                    if patterns:
+                        insights_rows.append({"Metric": "", "Value": ""})
+                        insights_rows.append({"Metric": "═════ DETECTED PATTERNS ═════", "Value": ""})
+                        for p in patterns:
+                            insights_rows.append({
+                                "Metric": f"  [{p['severity']}] {p['type']}",
+                                "Value": p["description"]
+                            })
+                    
+                    # Anomaly Stats
+                    anomaly_data = insights.get("anomalies", {})
+                    anomaly_stats = anomaly_data.get("stats", {}) if isinstance(anomaly_data, dict) else {}
+                    if anomaly_stats:
+                        insights_rows.append({"Metric": "", "Value": ""})
+                        insights_rows.append({"Metric": "═════ STATISTICAL ANALYSIS ═════", "Value": ""})
+                        insights_rows.append({"Metric": "  Mean Amount", "Value": f"${anomaly_stats.get('mean', 0):,.2f}"})
+                        insights_rows.append({"Metric": "  Median Amount", "Value": f"${anomaly_stats.get('median', 0):,.2f}"})
+                        insights_rows.append({"Metric": "  Std Deviation", "Value": f"${anomaly_stats.get('std_dev', 0):,.2f}"})
+                        insights_rows.append({"Metric": "  Outlier Count", "Value": anomaly_stats.get("outlier_count", 0)})
+                        insights_rows.append({"Metric": "  Outlier Percentage", "Value": f"{anomaly_stats.get('outlier_pct', 0)}%"})
+                    
+                    df_insights_summary = pd.DataFrame(insights_rows)
+                    df_insights_summary.to_excel(writer, index=False, sheet_name='Reconciliation Insights')
+                    
+                    # Format the insights sheet
+                    ws_insights = writer.sheets['Reconciliation Insights']
+                    fmt_section = workbook.add_format({'bold': True, 'fg_color': '#1565C0', 'font_color': '#FFFFFF', 'font_size': 11})
+                    fmt_metric = workbook.add_format({'font_size': 10})
+                    fmt_value = workbook.add_format({'font_size': 10, 'bold': True})
+                    
+                    ws_insights.set_column(0, 0, 35)
+                    ws_insights.set_column(1, 1, 60)
+                    
+                    for row_idx, row_data in enumerate(insights_rows):
+                        if "═════" in str(row_data.get("Metric", "")):
+                            ws_insights.write(row_idx + 1, 0, row_data["Metric"], fmt_section)
+                            ws_insights.write(row_idx + 1, 1, str(row_data["Value"]), fmt_section)
+                        else:
+                            ws_insights.write(row_idx + 1, 0, row_data["Metric"], fmt_metric)
+                            ws_insights.write(row_idx + 1, 1, str(row_data["Value"]), fmt_value)
+                    
+                    # Write Source Reliability as separate sub-table if present
+                    source_rel = insights.get("source_reliability", pd.DataFrame())
+                    if not source_rel.empty:
+                        start_row = len(insights_rows) + 3
+                        ws_insights.write(start_row, 0, "═════ SOURCE RELIABILITY ═════", fmt_section)
+                        for col_idx, col_name in enumerate(source_rel.columns):
+                            ws_insights.write(start_row + 1, col_idx, col_name, header_format)
+                        for r_idx, (_, r_data) in enumerate(source_rel.iterrows()):
+                            for c_idx, val in enumerate(r_data.values):
+                                ws_insights.write(start_row + 2 + r_idx, c_idx, str(val), fmt_metric)
+                    
+                    # Write Risk Scores as separate sheet
+                    risk_df = insights.get("risk_scores", pd.DataFrame())
+                    
+                    fmt_low = workbook.add_format({'bg_color': '#C6EFCE', 'font_color': '#006100'})
+                    fmt_med = workbook.add_format({'bg_color': '#FFEB9C', 'font_color': '#9C6500'})
+                    fmt_high = workbook.add_format({'bg_color': '#FFC7CE', 'font_color': '#9C0006'})
+                    fmt_crit = workbook.add_format({'bg_color': '#C00000', 'font_color': '#FFFFFF', 'bold': True})
+                    
+                    if not risk_df.empty:
+                        risk_df.to_excel(writer, index=False, sheet_name='Risk Analysis')
+                        ws_risk = writer.sheets['Risk Analysis']
+                        for col_num, value in enumerate(risk_df.columns.values):
+                            ws_risk.write(0, col_num, value, header_format)
+                            ws_risk.set_column(col_num, col_num, 18)
+                        
+                        # Color-code risk levels
+                        risk_col_idx = risk_df.columns.tolist().index("Risk Level") if "Risk Level" in risk_df.columns else -1
+                        if risk_col_idx >= 0:
+                            for r_idx in range(len(risk_df)):
+                                level = str(risk_df.iloc[r_idx]["Risk Level"])
+                                if "Low" in level: fmt = fmt_low
+                                elif "Medium" in level: fmt = fmt_med
+                                elif "High" in level: fmt = fmt_high
+                                else: fmt = fmt_crit
+                                ws_risk.write(r_idx + 1, risk_col_idx, level, fmt)
+
+                    # Write Aging Analysis as separate sheet
+                    aging_df = insights.get("aging", pd.DataFrame())
+                    if not aging_df.empty:
+                        aging_df.to_excel(writer, index=False, sheet_name='AGING ANALYSIS')
+                        ws_aging = writer.sheets['AGING ANALYSIS']
+                        for col_num, value in enumerate(aging_df.columns.values):
+                            ws_aging.write(0, col_num, value, header_format)
+                            ws_aging.set_column(col_num, col_num, 20)
+                        
+                        aging_col_idx = aging_df.columns.tolist().index("Risk Level") if "Risk Level" in aging_df.columns else -1
+                        if aging_col_idx >= 0:
+                            for r_idx in range(len(aging_df)):
+                                level = str(aging_df.iloc[r_idx]["Risk Level"])
+                                if "Safe" in level: fmt = fmt_low
+                                elif "Attention" in level: fmt = fmt_med
+                                elif "Risk" in level: fmt = fmt_high
+                                else: fmt = fmt_crit
+                                ws_aging.write(r_idx + 1, aging_col_idx, level, fmt)
+                
+                except Exception as e:
+                    self.log(f"Insights sheet warning: {e}")
+
 
         except Exception as e:
             self.log(f"Excel Save Error: {e}")
-            return df_result, None, df_discrepancy, df_schema_report
+            return df_result, None, df_discrepancy, df_schema_report, insights
 
-        return df_result, filename, df_discrepancy, df_schema_report
+        self._report_progress(90, "Complete.")
+        return df_result, filename, df_discrepancy, df_schema_report, insights
 
     def _to_float(self, val):
         try:

@@ -1,17 +1,17 @@
 from .welcome import WelcomeScreen
-from .welcome import WelcomeScreen
 from app.ui.soa.file_select import SOAFileSelectScreen
-from app.ui.soa.mapping import SOAMappingScreen
+from app.ui.soa.advanced_mapping import SOAAdvancedMappingScreen
 from app.ui.multi.file_select import MultiFileSelectScreen
 from app.ui.multi.mapping import MultiMappingScreen
 from app.ui.quick_match.csv_match import QuickMatchScreen
 from .results import ResultsScreen
 from ..core.engine import MatchingEngine
 from ..core.soa_engine import SOAEngine
+from ..core.worker import ReconciliationWorker
 from app.core.data_loader import DataLoader
-from PySide6.QtWidgets import QMessageBox, QMainWindow, QWidget, QVBoxLayout, QStackedWidget, QApplication
+from PySide6.QtWidgets import QMessageBox, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QStackedWidget, QApplication, QProgressDialog
 from PySide6.QtGui import QIcon
-from PySide6.QtCore import QFile, QTextStream
+from PySide6.QtCore import QFile, QTextStream, Qt
 import sys
 import os
 
@@ -34,6 +34,23 @@ class MainWindow(QMainWindow):
         self.layout = QVBoxLayout(central_widget)
         self.layout.setContentsMargins(0, 0, 0, 0)
         
+        # Top Bar for Theme Toggle
+        self.top_bar = QWidget()
+        top_layout = QHBoxLayout(self.top_bar)
+        top_layout.setContentsMargins(10, 5, 10, 0)
+        
+        self.btn_theme = QPushButton("☀️ Light Mode")
+        self.btn_theme.setCursor(Qt.PointingHandCursor)
+        self.btn_theme.setFixedSize(120, 30)
+        self.btn_theme.clicked.connect(self.toggle_theme)
+        # Prevent the button from getting huge or styling badly in the top bar
+        self.btn_theme.setStyleSheet("QPushButton { font-size: 13px; padding: 4px; border-radius: 15px; background: transparent; border: 1px solid #888; color: #888; } QPushButton:hover { background: rgba(128,128,128,0.2); }")
+        
+        top_layout.addStretch()
+        top_layout.addWidget(self.btn_theme)
+        
+        self.layout.addWidget(self.top_bar)
+        
         # Stacked Widget for Page Navigation
         self.stack = QStackedWidget()
         self.layout.addWidget(self.stack)
@@ -41,11 +58,37 @@ class MainWindow(QMainWindow):
         # Initialize Screens
         self.init_ui()
         
+        # Theme Setup
+        self.current_theme = "dark"
+        self.apply_theme()
+        
         # State Data
         self.current_base_file = None
         self.current_ref_files = []
         self.current_column_config = {}
         self.reco_mode = "SOA"
+
+    def apply_theme(self):
+        """Loads and applies the QSS style sheet globally based on current_theme."""
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if self.current_theme == "light":
+            file_path = os.path.join(base_dir, "resources", "styles_light.qss")
+            self.btn_theme.setText("🌙 Dark Mode")
+        else:
+            file_path = os.path.join(base_dir, "resources", "styles_dark.qss")
+            self.btn_theme.setText("☀️ Light Mode")
+            
+        file = QFile(file_path)
+        if file.open(QFile.ReadOnly | QFile.Text):
+            stream = QTextStream(file)
+            QApplication.instance().setStyleSheet(stream.readAll())
+        else:
+            print(f"Warning: Could not load stylesheet from {file_path}")
+
+    def toggle_theme(self):
+        """Toggles between light and dark modes."""
+        self.current_theme = "dark" if self.current_theme == "light" else "light"
+        self.apply_theme()
 
     def init_ui(self):
         # 0. Welcome Screen
@@ -56,8 +99,8 @@ class MainWindow(QMainWindow):
         self.soa_file_select = SOAFileSelectScreen(self)
         self.stack.addWidget(self.soa_file_select)
         
-        self.soa_mapping = SOAMappingScreen(self)
-        self.stack.addWidget(self.soa_mapping)
+        self.soa_advanced_mapping = SOAAdvancedMappingScreen(self)
+        self.stack.addWidget(self.soa_advanced_mapping)
         
         # 2. Multi Screens
         self.multi_file_select = MultiFileSelectScreen(self)
@@ -85,11 +128,11 @@ class MainWindow(QMainWindow):
         
         # SOA Flow
         self.soa_file_select.go_back.connect(lambda: self.navigate_to_widget(self.welcome_screen))
-        self.soa_file_select.proceed_to_mapping.connect(self.goto_soa_mapping)
+        self.soa_file_select.proceed_to_advanced_mapping.connect(self.goto_soa_advanced_mapping)
         self.soa_file_select.run_reconciliation_now.connect(self.run_reconciliation)
         
-        self.soa_mapping.go_back.connect(lambda: self.navigate_to_widget(self.soa_file_select))
-        self.soa_mapping.run_reco.connect(self.run_reconciliation)
+        self.soa_advanced_mapping.go_back.connect(lambda: self.navigate_to_widget(self.soa_file_select))
+        self.soa_advanced_mapping.run_reco.connect(self.run_reconciliation)
         
         # Multi Flow
         self.multi_file_select.go_back.connect(lambda: self.navigate_to_widget(self.welcome_screen))
@@ -129,18 +172,20 @@ class MainWindow(QMainWindow):
     def go_back_from_results(self):
         if hasattr(self, 'reco_mode') and self.reco_mode == "MULTI":
             self.navigate_to_widget(self.multi_mapping)
+        elif self.stack.currentWidget() == self.soa_advanced_mapping:
+            self.navigate_to_widget(self.soa_advanced_mapping)
         else:
-            self.navigate_to_widget(self.soa_mapping)
+            self.navigate_to_widget(self.soa_file_select)
 
-    def goto_soa_mapping(self, base_file, ref_files, column_config=None, match_keys=None, date_col=None, amount_col=None):
-        """Loads data and switches to SOA Mapping Screen."""
-        self._load_and_goto_mapping(self.soa_mapping, base_file, ref_files, column_config, match_keys, date_col, amount_col)
+    def goto_soa_advanced_mapping(self, base_file, ref_files, column_config=None, match_keys=None, date_col=None, amount_col=None, ref_custom_names=None):
+        """Loads data and switches to SOA Advanced Mapping Screen."""
+        self._load_and_goto_mapping(self.soa_advanced_mapping, base_file, ref_files, column_config, match_keys, date_col, amount_col, ref_custom_names)
 
     def goto_multi_mapping(self, base_file, ref_files, column_config=None, match_keys=None):
         """Loads data and switches to Multi Mapping Screen."""
         self._load_and_goto_mapping(self.multi_mapping, base_file, ref_files, column_config, match_keys)
 
-    def _load_and_goto_mapping(self, target_screen, base_file, ref_files, column_config=None, match_keys=None, date_col=None, amount_col=None):
+    def _load_and_goto_mapping(self, target_screen, base_file, ref_files, column_config=None, match_keys=None, date_col=None, amount_col=None, ref_custom_names=None):
         try:
             self.current_base_file = base_file
             self.current_ref_files = ref_files
@@ -162,8 +207,8 @@ class MainWindow(QMainWindow):
             # Actually, MultiMappingScreen set_data signature is standard: (base, ref, base_cols, ref_cols, match_keys)
             # SOAMappingScreen set_data signature is new: (..., date_col, amount_col, file_column_config)
             
-            if isinstance(target_screen, SOAMappingScreen):
-                target_screen.set_data(base_file, ref_files, base_cols, ref_cols_dict, match_keys, date_col, amount_col, self.current_column_config)
+            if isinstance(target_screen, SOAAdvancedMappingScreen):
+                target_screen.set_data(base_file, ref_files, base_cols, ref_cols_dict, match_keys, date_col, amount_col, ref_custom_names)
             else:
                 target_screen.set_data(base_file, ref_files, base_cols, ref_cols_dict, match_keys)
             self.navigate_to_widget(target_screen)
@@ -290,8 +335,12 @@ class MainWindow(QMainWindow):
                             
                         df = DataLoader.load_file(ref_path, usecols=ref_usecols)
                         
-                        # Use Ref1/Ref2 for column prefixing (short, clean headers)
-                        ref_name = f"Ref{len(ref_configs) + 1}"
+                        # Use custom name if provided, otherwise Ref1/Ref2/...
+                        custom_names = config.get("ref_custom_names", {})
+                        if ref_path in custom_names and custom_names[ref_path]:
+                            ref_name = custom_names[ref_path]
+                        else:
+                            ref_name = f"Ref{len(ref_configs) + 1}"
                         path_to_name_map[ref_path] = ref_name
                         ref_configs.append((df, match_col, return_cols, ref_name))
                     except Exception as e:
@@ -319,6 +368,7 @@ class MainWindow(QMainWindow):
                      base_usecols.append(soa_match_col)
                  
                  soa_df = DataLoader.load_file(soa_path, usecols=base_usecols)
+                 path_to_name_map[soa_path] = "SOA" # Ensure schema engine can label it
             except Exception as e:
                  print(f"Error loading SOA {soa_path}: {e}")
                  QMessageBox.critical(self, "File Load Error", f"Error loading base file {os.path.basename(soa_path)}:\n{str(e)}")
@@ -328,33 +378,88 @@ class MainWindow(QMainWindow):
             engine = SOAEngine(soa_df, soa_match_col, date_col, amount_col, ref_configs, 
                                mode=self.reco_mode, schema_config=schema_config, 
                                path_mapping=path_to_name_map)
-            result_df, saved_path, discrepancy_df, schema_df = engine.run()
             
-            print(f"DEBUG: Reconciliation Complete. Saved to {saved_path}")
+            # --- THREADED EXECUTION with Progress Dialog ---
+            self._progress_dialog = QProgressDialog("Starting reconciliation...", "Cancel", 0, 100, self)
+            self._progress_dialog.setWindowTitle("⚡ Apeiron Bridge — Processing")
+            self._progress_dialog.setWindowModality(Qt.WindowModal)
+            self._progress_dialog.setMinimumWidth(450)
+            self._progress_dialog.setMinimumDuration(0)
+            self._progress_dialog.setValue(0)
+            self._progress_dialog.setStyleSheet("""
+                QProgressDialog {
+                    background-color: #2b2b2b;
+                    color: #e0e0e0;
+                }
+                QProgressBar {
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    text-align: center;
+                    background-color: #1e1e1e;
+                    color: #e0e0e0;
+                }
+                QProgressBar::chunk {
+                    background-color: #1565C0;
+                    border-radius: 3px;
+                }
+                QLabel { color: #e0e0e0; font-size: 12px; }
+                QPushButton { 
+                    background-color: #c62828; color: white; 
+                    border: none; padding: 6px 16px; border-radius: 4px; 
+                }
+                QPushButton:hover { background-color: #e53935; }
+            """)
             
-            # Show Results (both detailed and discrepancy)
-            self.results_screen.display_results(result_df, discrepancy_df, schema_df)
-            self.stack.setCurrentWidget(self.results_screen)
+            self._worker = ReconciliationWorker(engine, generate_insights=True, parent=self)
             
-            if saved_path:
-                 file_name = os.path.basename(saved_path)
-                 folder = os.path.dirname(saved_path)
-                 msg = QMessageBox(self)
-                 msg.setWindowTitle("Reconciliation Complete")
-                 msg.setIcon(QMessageBox.Information)
-                 msg.setText(f"Reconciliation completed successfully!\n\nFile: {file_name}")
-                 msg.setInformativeText(f"Saved to:\n{folder}")
-                 msg.setStandardButtons(QMessageBox.Ok)
-                 msg.setMinimumWidth(500)
-                 msg.setMinimumWidth(500)
-                 msg.exec()
-
-            # Check for non-critical errors (partial failures)
-            if hasattr(engine, 'errors') and engine.errors:
-                error_text = "\n\n".join(engine.errors)
-                QMessageBox.warning(self, "Partial Reconciliation Errors", 
-                    f"The following errors occurred during processing:\n\n{error_text}\n\n"
-                    "Check the logs or file content for more details.")
+            def on_progress(pct, msg):
+                if self._progress_dialog:
+                    self._progress_dialog.setValue(pct)
+                    self._progress_dialog.setLabelText(f"⚡ {msg}")
+            
+            def on_finished(result):
+                if self._progress_dialog:
+                    self._progress_dialog.close()
+                    self._progress_dialog = None
+                
+                result_df, saved_path, discrepancy_df, schema_df, insights = result
+                
+                print(f"DEBUG: Reconciliation Complete. Saved to {saved_path}")
+                
+                # Show Results (detailed, discrepancy, schema + insights)
+                self.results_screen.display_results(result_df, discrepancy_df, schema_df, insights=insights)
+                self.stack.setCurrentWidget(self.results_screen)
+                
+                if saved_path:
+                    file_name = os.path.basename(saved_path)
+                    folder = os.path.dirname(saved_path)
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("Reconciliation Complete")
+                    msg.setIcon(QMessageBox.Information)
+                    msg.setText(f"Reconciliation completed successfully!\n\nFile: {file_name}")
+                    msg.setInformativeText(f"Saved to:\n{folder}")
+                    msg.setStandardButtons(QMessageBox.Ok)
+                    msg.setMinimumWidth(500)
+                    msg.exec()
+                
+                # Check for non-critical errors
+                if hasattr(engine, 'errors') and engine.errors:
+                    error_text = "\n\n".join(engine.errors)
+                    QMessageBox.warning(self, "Partial Reconciliation Errors", 
+                        f"The following errors occurred during processing:\n\n{error_text}")
+            
+            def on_error(error_msg):
+                if self._progress_dialog:
+                    self._progress_dialog.close()
+                    self._progress_dialog = None
+                QMessageBox.critical(self, "Reconciliation Failed", f"An error occurred:\n{error_msg}")
+            
+            self._worker.progress.connect(on_progress)
+            self._worker.finished.connect(on_finished)
+            self._worker.error.connect(on_error)
+            self._progress_dialog.canceled.connect(self._worker.cancel)
+            
+            self._worker.start()
 
         except Exception as e:
             QMessageBox.critical(self, "Reconciliation Failed", f"An error occurred:\n{str(e)}")

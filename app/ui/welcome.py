@@ -30,11 +30,19 @@ class ApeironBridgeWidget(QWidget):
         c_cyan = QColor("#00E5FF")
         c_purple = QColor("#D500F9")
         c_gold = QColor("#FFD700")
-        c_bg = QColor("#1E1E1E") # Match app background
+        
+        # Dynamic Background Based on Theme
+        is_dark = True
+        main_win = self.window()
+        if hasattr(main_win, 'current_theme'):
+            is_dark = (main_win.current_theme == "dark")
+            
+        c_bg = QColor("#121212") if is_dark else QColor("#F8F9FA")
 
         # 1. Background (Subtle Glow at bottom)
         grad_bg = QLinearGradient(0, h, 0, h/2)
-        grad_bg.setColorAt(0, QColor(0, 229, 255, 30)) # Faint Cyan glow
+        glow_alpha = 30 if is_dark else 15
+        grad_bg.setColorAt(0, QColor(0, 229, 255, glow_alpha)) # Faint Cyan glow
         grad_bg.setColorAt(1, c_bg)
         painter.fillRect(self.rect(), grad_bg)
         
@@ -105,7 +113,8 @@ class ApeironBridgeWidget(QWidget):
                  painter.drawLine(QPointF(x, deck_y), QPointF(x, deck_y - 15))
         
         # 6. Title Text "APEIRON" integrated (Moved down)
-        painter.setPen(QColor(255, 255, 255))
+        text_color = QColor(255, 255, 255) if is_dark else QColor(26, 26, 26)
+        painter.setPen(text_color)
         font = painter.font()
         font.setPointSize(24)
         font.setBold(True)
@@ -165,14 +174,11 @@ class WelcomeScreen(QWidget):
         card_soa.setObjectName("Card")
         card_soa.setFixedWidth(280)
         card_soa.setFixedHeight(230) # Taller for extra space
-        # Card Style: Blue Border
-        card_soa.setStyleSheet(f"""
-            QFrame#Card {{
-                background-color: #2D2D30;
-                border: 2px solid {c_blue};
-                border-radius: 8px;
-            }}
-        """)
+        card_soa.setObjectName("Card")
+        card_soa.setFixedWidth(280)
+        card_soa.setFixedHeight(230) # Taller for extra space
+        # Hardcoded styles removed; now handled by QSS Card selector
+        card_soa.setStyleSheet(f"QFrame#Card {{ border: 2px solid {c_blue}; }}")
         
         card_soa_layout = QVBoxLayout(card_soa)
         
@@ -181,7 +187,7 @@ class WelcomeScreen(QWidget):
         lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel("Compare Statement of Account against Reference files.")
-        lbl_desc.setStyleSheet("color: #CCCCCC; font-size: 13px; border: none; background: transparent;")
+        lbl_desc.setObjectName("SubTitle") # Use QSS for color/font
         lbl_desc.setWordWrap(True)
         lbl_desc.setAlignment(Qt.AlignCenter)
         
@@ -252,8 +258,8 @@ class WelcomeScreen(QWidget):
         footer = QLabel(footer_text)
         footer.setAlignment(Qt.AlignCenter)
         # Using a slightly different color to match the subtle look in the screenshot, likely similar to existing #666666 or #556B2F / Muted Blue
-        # The screenshot text looks like a muted blue-ish grey. Let's stick to a clean grey/blue info text style.
-        footer.setStyleSheet("color: #5c8a8a; font-size: 12px;") 
+        # Using a slightly different color to match the subtle look in the screenshot
+        footer.setStyleSheet("color: #78909C; font-size: 11px;") 
         layout.addWidget(footer)
 
     def create_action_card(self, title_text, desc_text, btn_object_name, color="#FFFFFF"):
@@ -264,13 +270,7 @@ class WelcomeScreen(QWidget):
         card.setFixedHeight(200)
         
         # Apply Card Border Color
-        card.setStyleSheet(f"""
-            QFrame#Card {{
-                background-color: #2D2D30;
-                border: 2px solid {color};
-                border-radius: 8px;
-            }}
-        """)
+        card.setStyleSheet(f"QFrame#Card {{ border: 2px solid {color}; }}")
         
         card_layout = QVBoxLayout(card)
         
@@ -280,7 +280,7 @@ class WelcomeScreen(QWidget):
         lbl_title.setAlignment(Qt.AlignCenter)
         
         lbl_desc = QLabel(desc_text)
-        lbl_desc.setStyleSheet("color: #CCCCCC; font-size: 13px; border: none; background: transparent;")
+        lbl_desc.setObjectName("SubTitle")
         lbl_desc.setWordWrap(True)
         lbl_desc.setAlignment(Qt.AlignCenter)
         

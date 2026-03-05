@@ -15,37 +15,44 @@ Upon launching the application, you will see the **Apeiron Bridge** main dashboa
 
 The file selection screen is where you gather all files required for the bridge.
 
-1. **Add Files**:
-   - Click **"Add Excel/CSV Files"** to browse your computer.
-   - **NEW**: You can now **Drag and Drop** files directly from your folder into the application window.
-2. **Review List**: All added files will appear in the central list. You can remove unwanted files by selecting them and clicking **"Remove Selected"**.
-3. **Set Base File (SOA)**: Use the dropdown menu at the bottom to designate which file is your **SOA (Statement of Account)**. This is the primary file that others will be matched against.
-4. **Proceed**: Click **"Next: Map Columns"** to continue.
+1. **Add Files**: Use the "Add Excel/CSV Files" button or drag-and-drop files directly into the window.
+2. **Custom Naming (NEW)**: Next to each reference file, you will see a text box (e.g., defaulting to `Ref1`). You can type a **Custom Name** (like `OI360` or `Carrier_Data`). This name will be used as the column header in all exports, making your reports much easier to read!
+3. **Set Base File (SOA)**: Ensure your Statement of Account is designated as the primary file.
+4. **Proceed**: Click **"Next"** to continue.
 
 ## Step 3: Map Columns & Configure Rules
 
 This screen defines the "Bridge" between your SOA and your Reference files.
 
 1. **Select Reference**: Use the center dropdown to choose one of your reference files.
-2. **Match Key**:
-   - Select the column from your **SOA** (Left) and the corresponding column from your **Reference** (Center) that should match (e.g., `Invoice Number`).
-   - Click **"Add Mapping Rule"**.
-   - *Optional*: Check **"Enable Partial/Fuzzy Match"** if your invoice numbers have different formats (e.g., prefix differences).
+2. **Match Key**: Select the column from your SOA and the corresponding column from your Reference that should match (e.g., `Invoice Number`).
 3. **Advanced Settings**:
-   - **Date Column**: Select the column in your SOA containing dates. This enables the **Age Bucketing** feature (0-15, 16-30 days, etc.).
-   - **Amount Column**: Select the column in your SOA containing amounts. This enables **Mismatch Highlighting** in the final report.
-4. **Final Step**: Click **"Run Reconciliation"**.
+   - **Date Column**: Select the column in your SOA containing dates. This enables the **Age Bucketing** and **Aging Analysis**.
+   - **Amount Column**: Select the column in your SOA containing amounts. This enables the **AI Insights Engine** and automatic discrepancy calculation.
+4. **Run**: Click **"Run Reconciliation"**. Due to our new **High-Performance Threading**, the app will not freeze even on 200MB+ files. A progress dialog will keep you updated!
 
-## Step 4: Results & Export
+## Step 4: Results & AI Insights
 
-Once processing is complete (using the high-speed **SOAEngine**):
+Once processing is complete, you will see a multi-tabbed results screen:
 
-1. **Preview**: A summary of matches will be displayed in the results table.
-2. **Excel Report**: The system automatically generates a detailed report in your `output/` folder.
-   - **Age Bucket**: Invoices are automatically categorized by age.
-   - **Match Source**: Indicates which reference file(s) matched the record.
-   - **Variance Highlighting**: Amounts that do not match between files are highlighted in **RED** for immediate investigation.
-   - **Amount Difference**: A dedicated column shows the exact variance found.
+1. **📋 Detailed View**: A row-by-row breakdown of every matched invoice across all sources.
+2. **⚠️ Discrepancy Report**: Focused strictly on mismatches, showing individual reference amounts, calculated `Delta`, and the precise `Status` (e.g., `MATCH`, `Underpaid (Short)`, `MISSING IN REF`).
+3. **🔍 Normalized Comparison**: A view aligning data based on your Multi-File schema (if configured).
+4. **🧠 Insights Dashboard (NEW)**: Our AI-powered analysis engine provides:
+   - **KPI Summary**: Your overall Match Rate and Health Score.
+   - **Status Breakdown**: A quick tally of where things went wrong.
+   - **Pattern Detection**: Automatically flags systematic issues (e.g., "Source X consistently underpays by 5%").
+   - **Source Reliability**: Grades each of your reference files (A+ down to D) based on accuracy and coverage.
+   - **Top Discrepancies**: The highest-impact issues sorted automatically.
+   - **Statistical Analysis**: Outlier detection using IQR (Interquartile Range).
+
+## Step 5: Export to Excel
+
+Clicking **"Export to Excel"** generates a beautifully formatted workbook with:
+
+- Dedicated sheets for Detailed View and Discrepancy Report with color-coded highlighters.
+- A dedicated **Reconciliation Insights** sheet containing the full dashboard summary.
+- A dedicated **Risk Analysis** sheet assigning a 0-100 risk score to every problematic invoice based on age, amount, and missing data!
 
 ---
 *Developed by Koinonia Technologies. All rights reserved. Proprietary Software.*
