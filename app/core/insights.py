@@ -148,8 +148,14 @@ class ReconciliationInsights:
             
         summary["health_score"] = round(health, 1)
 
+        # Status breakdown should count matches from result and mismatches from disc
+        status_counts = {"MATCH": match_count}
         if not disc.empty and "Status" in disc.columns:
-            summary["status_breakdown"] = disc["Status"].value_counts().to_dict()
+            disc_counts = disc["Status"].value_counts().to_dict()
+            for k, v in disc_counts.items():
+                if k != "MATCH":
+                    status_counts[k] = v
+        summary["status_breakdown"] = status_counts
 
         summary["ref_count"] = len(self.ref_names)
         return summary
@@ -162,8 +168,12 @@ class ReconciliationInsights:
         # Compute risk scores from df_result when df_disc is empty (all-MATCH case)
         if not self.df_disc.empty and "Delta" in self.df_disc.columns:
             disc = self.df_disc.copy()
-        elif not self.df_result.empty and "Delta" in self.df_result.columns:
+        elif not self.df_result.empty:
             disc = self.df_result.copy()
+            if "Delta" not in disc.columns:
+                disc["Delta"] = 0.0
+            if "Status" not in disc.columns:
+                disc["Status"] = "MATCH"
         else:
             return pd.DataFrame()
         disc = disc.copy()
@@ -281,10 +291,10 @@ class ReconciliationInsights:
 
         # Find outliers
         outlier_mask = (amounts < lower_bound) | (amounts > upper_bound)
-        invoice_col = "Invoice #" if "Invoice #" in self.df_disc.columns else "ID / Key"
+        invoice_col = "Invoice #" if "Invoice #" in data_df.columns else "ID / Key"
 
         if outlier_mask.any():
-            outlier_df = self.df_disc.loc[outlier_mask, [invoice_col, base_label]].copy()
+            outlier_df = data_df.loc[outlier_mask, [invoice_col, base_label]].copy()
             outlier_df["Deviation"] = outlier_df[base_label].apply(
                 lambda x: "⬆ Above Upper" if x > upper_bound else "⬇ Below Lower"
             )
@@ -376,9 +386,6 @@ class ReconciliationInsights:
         rows = []
         for ref_name in self.ref_names:
             amt_col = f"{ref_name} Amount"
-            if amt_col not in self.df_disc.columns:
-                continue
-
             if amt_col not in source_df.columns:
                 continue
             ref_amounts = source_df[amt_col]
@@ -440,23 +447,23 @@ class ReconciliationInsights:
         base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
 
         cols = [invoice_col]
-        if base_label in self.df_disc.columns:
+        if base_label in disc_src.columns:
             cols.append(base_label)
         
         # Add ref amount columns
         for ref_name in self.ref_names:
             amt_col = f"{ref_name} Amount"
-            if amt_col in self.df_disc.columns:
+            if amt_col in disc_src.columns:
                 cols.append(amt_col)
         
         cols.extend(["Delta", "Status"])
-        cols = [c for c in cols if c in self.df_disc.columns]
+        cols = [c for c in cols if c in disc_src.columns]
 
-        top = self.df_disc.nlargest(10, "Delta", keep="first") if len(self.df_disc) > 0 else pd.DataFrame()
+        top = disc_src.nlargest(10, "Delta", keep="first") if len(disc_src) > 0 else pd.DataFrame()
         
         # Actually sort by absolute delta
         if not top.empty:
-            non_match = self.df_disc[self.df_disc["Status"] != "MATCH"].copy()
+            non_match = disc_src[disc_src.get("Status", "") != "MATCH"].copy() if "Status" in disc_src.columns else disc_src.copy()
             if not non_match.empty:
                 non_match["_abs_delta"] = non_match["Delta"].abs()
                 top = non_match.nlargest(min(10, len(non_match)), "_abs_delta")
