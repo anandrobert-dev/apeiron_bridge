@@ -11,32 +11,37 @@ Follow this step-by-step guide to perform a reconciliation.
 ### Phase 1: Launch & File Selection
 
 1. **Launch the Module**
-    * On the Welcome Screen, locate the **"SOA Reconciliation"** card (left side).
-    * Click the green **"Launch"** button.
+    * On the Welcome Screen, locate the **"SOA Reconciliation"** card and click the blue **Launch** button.
 
-2. **Select Base File (SOA)**
-    * Click **"Browse Base File"**.
-    * Select your primary Statement of Account file (Excel or CSV).
-    * *Tip: This is the "Master" file that determines what you are looking for.*
+2. **Add Excel/CSV Files**
+    * Click the green **"Add Excel/CSV Files"** button to browse, or simply **drag and drop** your files anywhere onto the list area. You can add as many reference files as you need.
 
-3. **Select Reference Files**
-    * Click **"Add Reference File(s)"**.
-    * Select one or more files you want to check against the SOA.
-    * *You can add multiple files (e.g., Ref1, Ref2, Ref3).*
+3. **Set the MAIN File (SOA) & Properties**
+    * Click the **Radio Button** on the far left of the row you want to act as your primary SOA (Main file).
+    * Once selected, the **Date** and **Amount** selection boxes will appear for that file. Select the appropriate columns.
+    * *Tip: You can type a custom name (e.g., "Main SOA") into the text box next to the radio button to rename the file for the report.*
 
-4. **Proceed**
-    * Click **"Next: Configure Columns"** to move to the Mapping Screen.
+4. **Configure Reference Files & Ordering**
+    * For every other file in the list, select the column that matches the Master file using the **Match Key / Join Column** dropdown.
+    * *Tip: You can click and hold any file row to **drag it up or down** to change the sequence of the report columns.*
+
+5. **Run Reconciliation (Recommended)**
+    * Click the purple **"RUN RECONCILIATION"** button to process immediately.
+    * *This skips advance mapping and auto-maps all columns!*
+
+6. **Optional: Advance Mapping**
+    * Click the dark **"ADVANCE MAPPING"** button only if you need to build normalized schemas or filter specific columns before running.
 
 ---
 
-### Phase 2: Mapping & Configuration
+### Phase 2: Advance Mapping (Optional)
 
-The Mapping Screen is divided into three colorful panels. You can resize them by dragging the dividers.
+Only used if you clicked "ADVANCE MAPPING".
 
 #### 1. Configure Base File (Left Blue Panel)
 
 * **Base File Columns**: This list shows all columns in your SOA.
-* **Action**: Select the column that contains the unique identifier (e.g., **Invoice #**, Reference ID).
+* **Master ID Column**: Select the column that contains the unique identifier (e.g., **Invoice #**, Reference ID).
 * **Date Column**: Select the column containing the Invoice Date (used for Age Bucketing).
 * **Amount Column**: Select the column containing the Open Amount (used for Discrepancy checks).
 
@@ -44,22 +49,16 @@ The Mapping Screen is divided into three colorful panels. You can resize them by
 
 * **Select Reference File**: Choose which file you are currently configuring from the dropdown (e.g., `Ref1.xlsx`).
 * **Match Column**: Choose the column in this file that matches the SOA's unique identifier (e.g., **Invoice No**).
-* **Return Columns**: Select which columns you want to **copy** from this file into your final report (e.g., Status, Remarks, Payment Date).
-  * *Tip: Use "Select All" if you want everything, or pick specific relevant fields.*
+* **Return Columns**: Select which columns you want to **copy** from this file into your final report.
+  * *Tip: Use "Select All" if you want everything.*
 
-**IMPORTANT:** If you have multiple reference files:
+#### 3. Schema & Rules (Right Purple Panel)
 
-1. Select `Ref1` in the dropdown → Configure match/return columns.
-2. Switch dropdown to `Ref2` → Configure match/return columns for Ref2.
-3. Each file has its own independent settings.
-
-#### 3. Rules & Templates (Right Purple Panel)
-
-* **Fuzzy Match**: Check "Enable Partial/Fuzzy Match" ONLY if your invoice numbers are messy (e.g., `INV-100` vs `100`). For most financial data, leave this **unchecked** (Exact Match).
-* **Save Ref Mapping**: Click this button to confirm your settings for the current reference file.
+* **Cross-File Normalization**: Map standard names (like "Tracking_Code") to exact headers across files to align disjointed reports neatly.
 * **Templates**:
   * **Save Tmplt**: Save your current configuration (for all files) to use again later.
   * **Load Tmplt**: Load a previously saved configuration.
+
 
 ---
 
