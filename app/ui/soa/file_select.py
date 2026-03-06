@@ -190,11 +190,10 @@ class SOAFileSelectScreen(QWidget):
         item = QListWidgetItem()
         self.file_list.addItem(item)
         
-        # Create Widget for Item (Arrows + Role Badge + Label + Match Key + Config Button)
+        # Create Widget for Item
         widget = QWidget()
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(8, 8, 10, 8)
         
+
         # ▲/▼ Reorder Buttons
         arrow_style = """
             QPushButton {
@@ -378,7 +377,6 @@ class SOAFileSelectScreen(QWidget):
         grid.addWidget(match_key_container,  0, 4, 2, 1, Qt.AlignVCenter)
         grid.addWidget(btn_config,           0, 5, 2, 1, Qt.AlignVCenter)
 
-        widget.setLayout(grid)
         item.setSizeHint(widget.sizeHint() +  PySide6.QtCore.QSize(0, 10))
         if item.sizeHint().height() < 80:
             item.setSizeHint(PySide6.QtCore.QSize(item.sizeHint().width(), 80))
