@@ -32,6 +32,22 @@ class ReconciliationInsights:
         self.date_col = date_col
         self.insights = {}
 
+    
+    def _get_invoice_col(self, df):
+        if "Invoice #" in df.columns:
+            return "Invoice #"
+        elif "ID / Key" in df.columns:
+            return "ID / Key"
+        for col in df.columns:
+            # Fallback search for common ID columns
+            col_l = col.lower()
+            if "invoice" in col_l and ("id" in col_l or "num" in col_l or "#" in col_l):
+                return col
+            if col_l == "invoice":
+                return col
+        # Absolute fallback, just return first column
+        return df.columns[0] if len(df.columns) > 0 else "ID / Key"
+
     def generate_all(self):
         """Run all insight generators and return combined results dict."""
         self.insights["summary"] = self._executive_summary()
@@ -177,7 +193,7 @@ class ReconciliationInsights:
         else:
             return pd.DataFrame()
         disc = disc.copy()
-        invoice_col = "Invoice #" if "Invoice #" in disc.columns else "ID / Key"
+        invoice_col = self._get_invoice_col(disc)
         if invoice_col not in disc.columns:
             invoice_col = disc.columns[0]
 
@@ -299,7 +315,7 @@ class ReconciliationInsights:
 
         # Find outliers
         outlier_mask = (amounts < lower_bound) | (amounts > upper_bound)
-        invoice_col = "Invoice #" if "Invoice #" in data_df.columns else "ID / Key"
+        invoice_col = self._get_invoice_col(data_df)
 
         if outlier_mask.any():
             outlier_df = data_df.loc[outlier_mask, [invoice_col, base_label]].copy()
@@ -388,7 +404,7 @@ class ReconciliationInsights:
         if source_df.empty:
             return pd.DataFrame()
 
-        invoice_col = "Invoice #" if "Invoice #" in source_df.columns else "ID / Key"
+        invoice_col = self._get_invoice_col(source_df)
         base_label = self.amount_col if source_df is self.df_result else ("SOA Amount" if "SOA Amount" in source_df.columns else "Master Amount")
         if not base_label or base_label not in source_df.columns:
             for col in source_df.columns:
@@ -464,7 +480,7 @@ class ReconciliationInsights:
         if disc_src.empty or "Delta" not in disc_src.columns:
             return pd.DataFrame()
 
-        invoice_col = "Invoice #" if "Invoice #" in disc_src.columns else "ID / Key"
+        invoice_col = self._get_invoice_col(disc_src)
         base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
 
         cols = [invoice_col]
