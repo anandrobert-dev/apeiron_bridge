@@ -35,29 +35,40 @@ class DataLoader:
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 
-    @staticmethod
-    def load_file_headers(file_path: str) -> list:
+    _header_cache = {}
+
+    @classmethod
+    def load_file_headers(cls, file_path: str) -> list:
         """
         Efficiently loads only the headers (columns) of a file.
+        Caches the result based on file modification time to prevent redundant slow Excel parsing.
         """
         if not os.path.exists(file_path):
             return []
 
-        ext = os.path.splitext(file_path)[1].lower()
         try:
+            mtime = os.path.getmtime(file_path)
+            if file_path in cls._header_cache:
+                cached_mtime, cached_headers = cls._header_cache[file_path]
+                if cached_mtime == mtime:
+                    return cached_headers
+
+            ext = os.path.splitext(file_path)[1].lower()
             if ext == '.csv':
-                # Read only the first row
                 df = pd.read_csv(file_path, nrows=0)
-                return df.columns.tolist()
+                headers = df.columns.tolist()
             elif ext in ['.xlsx', '.xls']:
-                # Read only headers (nrows=0 might still load some data in Excel, but it's faster)
                 df = pd.read_excel(file_path, nrows=0)
-                return df.columns.tolist()
+                headers = df.columns.tolist()
+            else:
+                headers = []
+
+            if headers:
+                cls._header_cache[file_path] = (mtime, headers)
+            return headers
         except Exception as e:
             print(f"Error loading headers for {file_path}: {e}")
             return []
-        
-        return []
 
     @staticmethod
     def get_sheet_names(file_path: str) -> list:
