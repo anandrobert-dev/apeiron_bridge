@@ -411,7 +411,12 @@ class ResultsScreen(QWidget):
         layout = QHBoxLayout(container)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setContentsMargins(0, 0, 0, 0)
-        table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
+        
+        # Calculate exact width
+        total_width = table.horizontalHeader().length() + 4
+        table.setMinimumWidth(total_width)
+        table.setMaximumWidth(total_width)
+        
         layout.addWidget(table, alignment=Qt.AlignmentFlag.AlignTop)
         layout.addStretch()
         return container
@@ -476,7 +481,12 @@ class ResultsScreen(QWidget):
         layout = QHBoxLayout(container)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setContentsMargins(0, 0, 0, 0)
-        table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
+        
+        # Calculate exact width
+        total_width = table.horizontalHeader().length() + 4
+        table.setMinimumWidth(total_width)
+        table.setMaximumWidth(total_width)
+        
         layout.addWidget(table, alignment=Qt.AlignmentFlag.AlignTop)
         layout.addStretch()
         return container
