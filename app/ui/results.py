@@ -327,6 +327,31 @@ class ResultsScreen(QWidget):
         """Creates a readable QTableWidget from a list of dicts, left-aligned without stretching."""
         if not data_list:
             return QLabel("No data")
+
+        _TABLE_QSS = """
+            QTableWidget {
+                background-color: #1A1A2E;
+                color: #E0E0E0;
+                gridline-color: #333355;
+                border: 1px solid #333355;
+                font-size: 13px;
+                alternate-background-color: #16213E;
+                selection-background-color: #7B2FBE;
+                selection-color: #FFFFFF;
+            }
+            QTableWidget::item {
+                color: #E0E0E0;
+                padding: 4px 8px;
+            }
+            QHeaderView::section {
+                background-color: #009688;
+                color: #FFFFFF;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-right: 1px solid #00796B;
+            }
+        """
             
         table = QTableWidget()
         headers = list(data_list[0].keys())
@@ -335,16 +360,16 @@ class ResultsScreen(QWidget):
         table.setHorizontalHeaderLabels(headers)
         table.verticalHeader().setVisible(False)
         table.setAlternatingRowColors(True)
-        # Using pure Qt object name styling mapping
         table.setObjectName("DataTable")
-        table.setStyleSheet("QTableWidget#DataTable { font-size: 14px; }")
+        table.setStyleSheet(_TABLE_QSS)
         
+        _text_color = QColor("#E0E0E0")
         for i, row_dict in enumerate(data_list):
             for j, key in enumerate(headers):
                 val = row_dict.get(key, "")
-                val_str = str(val)
-                item = QTableWidgetItem(val_str)
+                item = QTableWidgetItem(str(val))
                 item.setFlags(item.flags() ^ Qt.ItemIsEditable)
+                item.setForeground(QBrush(_text_color))
                 table.setItem(i, j, item)
                 
         table.resizeColumnsToContents()
@@ -353,16 +378,38 @@ class ResultsScreen(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
         table.setMaximumHeight(min(300, 45 + len(data_list) * 35))
-        
         layout.addWidget(table)
         layout.addStretch()
         return container
 
     def _create_df_table(self, df):
         """Creates a readable QTableWidget from a DataFrame, left-aligned without stretching."""
+        _TABLE_QSS = """
+            QTableWidget {
+                background-color: #1A1A2E;
+                color: #E0E0E0;
+                gridline-color: #333355;
+                border: 1px solid #333355;
+                font-size: 13px;
+                alternate-background-color: #16213E;
+                selection-background-color: #7B2FBE;
+                selection-color: #FFFFFF;
+            }
+            QTableWidget::item {
+                color: #E0E0E0;
+                padding: 4px 8px;
+            }
+            QHeaderView::section {
+                background-color: #009688;
+                color: #FFFFFF;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-right: 1px solid #00796B;
+            }
+        """
         table = QTableWidget()
         table.setColumnCount(len(df.columns))
         table.setRowCount(len(df))
@@ -370,13 +417,15 @@ class ResultsScreen(QWidget):
         table.verticalHeader().setVisible(False)
         table.setAlternatingRowColors(True)
         table.setObjectName("DataTable")
-        table.setStyleSheet("QTableWidget#DataTable { font-size: 14px; }")
+        table.setStyleSheet(_TABLE_QSS)
         
+        _text_color = QColor("#E0E0E0")
         for i in range(len(df)):
             for j, val in enumerate(df.iloc[i]):
                 val_str = str(val) if pd.notna(val) else "—"
                 item = QTableWidgetItem(val_str)
                 item.setFlags(item.flags() ^ Qt.ItemIsEditable)
+                item.setForeground(QBrush(_text_color))
                 table.setItem(i, j, item)
                 
         table.resizeColumnsToContents()
@@ -385,10 +434,8 @@ class ResultsScreen(QWidget):
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
-        
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
         table.setMaximumHeight(min(400, 45 + len(df) * 35))
-        
         layout.addWidget(table)
         layout.addStretch()
         return container
