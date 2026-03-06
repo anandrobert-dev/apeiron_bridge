@@ -242,6 +242,7 @@ class ResultsScreen(QWidget):
                     formatted_ds.append(new_row)
                 lay_exec.addWidget(self._create_simple_table(formatted_ds))
                 
+            lay_exec.addStretch()
             insights_tabs.addTab(page_exec, "📊 Executive Overview")
 
         # ── TAB 2: DISCREPANCIES & STATUS ──
@@ -263,6 +264,7 @@ class ResultsScreen(QWidget):
             added_disc = True
             
         if added_disc:
+            lay_disc.addStretch()
             insights_tabs.addTab(page_disc, "⚠️ Discrepancies")
 
         # ── TAB 3: AI PATTERNS & RELIABILITY ──
@@ -283,6 +285,7 @@ class ResultsScreen(QWidget):
             added_ai = True
             
         if added_ai:
+            lay_ai.addStretch()
             insights_tabs.addTab(page_ai, "🎯 Patterns & Reliability")
 
         # ── TAB 4: STATISTICAL ANALYSIS ──
@@ -299,6 +302,8 @@ class ResultsScreen(QWidget):
                     {"Statistic": "Outliers Detected", "Value": f"{stats.get('outlier_count', 0)} ({stats.get('outlier_pct', 0)}%)"},
                 ]
                 lay_stat.addWidget(self._create_simple_table(stat_items))
+                
+                lay_stat.addStretch()
                 insights_tabs.addTab(page_stat, "📐 Statistical Analysis")
 
         # ── TAB 5: RISK ANALYSIS ──
@@ -308,6 +313,7 @@ class ResultsScreen(QWidget):
             page_risk, lay_risk = create_tab_page()
             lay_risk.addWidget(self._make_section("Risk Analysis", "Invoice-level risk scoring based on discrepancies, age, and missing references."))
             lay_risk.addWidget(self._create_df_table(risk_df))
+            lay_risk.addStretch()
             insights_tabs.addTab(page_risk, "🚨 Risk Analysis")
 
         # ── TAB 6: AGING ANALYSIS ──
@@ -317,6 +323,7 @@ class ResultsScreen(QWidget):
             page_age, lay_age = create_tab_page()
             lay_age.addWidget(self._make_section("Age Bucket Report", "Invoice distribution and risk categorization by age."))
             lay_age.addWidget(self._create_df_table(aging_data))
+            lay_age.addStretch()
             insights_tabs.addTab(page_age, "📅 Aging Analysis")
 
     def _make_section(self, title, subtitle=""):
@@ -400,10 +407,12 @@ class ResultsScreen(QWidget):
         table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         container = QWidget()
+        container.setMaximumHeight(total_height + 4)
         layout = QHBoxLayout(container)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setContentsMargins(0, 0, 0, 0)
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
-        layout.addWidget(table)
+        layout.addWidget(table, alignment=Qt.AlignmentFlag.AlignTop)
         layout.addStretch()
         return container
 
@@ -463,10 +472,12 @@ class ResultsScreen(QWidget):
         table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         container = QWidget()
+        container.setMaximumHeight(total_height + 4)
         layout = QHBoxLayout(container)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.setContentsMargins(0, 0, 0, 0)
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
-        layout.addWidget(table)
+        layout.addWidget(table, alignment=Qt.AlignmentFlag.AlignTop)
         layout.addStretch()
         return container
 
