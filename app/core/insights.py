@@ -159,10 +159,14 @@ class ReconciliationInsights:
     # ─────────────────────────────────────────────────────────────
     def _risk_scoring(self):
         """Assign a 0-100 risk score to each invoice in the discrepancy report."""
-        if self.df_disc.empty or "Delta" not in self.df_disc.columns:
+        # Compute risk scores from df_result when df_disc is empty (all-MATCH case)
+        if not self.df_disc.empty and "Delta" in self.df_disc.columns:
+            disc = self.df_disc.copy()
+        elif not self.df_result.empty and "Delta" in self.df_result.columns:
+            disc = self.df_result.copy()
+        else:
             return pd.DataFrame()
-
-        disc = self.df_disc.copy()
+        disc = disc.copy()
         invoice_col = "Invoice #" if "Invoice #" in disc.columns else "ID / Key"
         if invoice_col not in disc.columns:
             invoice_col = disc.columns[0]
@@ -245,14 +249,16 @@ class ReconciliationInsights:
     # ─────────────────────────────────────────────────────────────
     def _anomaly_detection(self):
         """Detect statistical outliers in amounts using IQR method."""
-        if self.df_disc.empty:
+        # Use df_result when df_disc is empty (all-MATCH case)
+        data_df = self.df_result if self.df_disc.empty else self.df_disc
+        if data_df.empty:
             return {"outliers": pd.DataFrame(), "stats": {}}
 
-        base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
-        if base_label not in self.df_disc.columns:
+        base_label = "SOA Amount" if "SOA Amount" in data_df.columns else "Master Amount"
+        if base_label not in data_df.columns:
             return {"outliers": pd.DataFrame(), "stats": {}}
 
-        amounts = self.df_disc[base_label].dropna()
+        amounts = data_df[base_label].dropna()
         if len(amounts) < 4:
             return {"outliers": pd.DataFrame(), "stats": {}}
 
@@ -425,10 +431,12 @@ class ReconciliationInsights:
     # ─────────────────────────────────────────────────────────────
     def _top_discrepancies(self):
         """Return top 10 highest-impact discrepancies sorted by absolute delta."""
-        if self.df_disc.empty or "Delta" not in self.df_disc.columns:
+        # Use df_result when df_disc is empty (all-MATCH case)
+        disc_src = self.df_disc if not self.df_disc.empty and "Delta" in self.df_disc.columns else self.df_result
+        if disc_src.empty or "Delta" not in disc_src.columns:
             return pd.DataFrame()
 
-        invoice_col = "Invoice #" if "Invoice #" in self.df_disc.columns else "ID / Key"
+        invoice_col = "Invoice #" if "Invoice #" in disc_src.columns else "ID / Key"
         base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
 
         cols = [invoice_col]
@@ -465,10 +473,12 @@ class ReconciliationInsights:
         """Identify systematic issues across reference sources."""
         patterns = []
 
-        if self.df_disc.empty or "Delta" not in self.df_disc.columns:
+        # Use df_result when df_disc is empty (all-MATCH case)
+        pat_df = self.df_disc if not self.df_disc.empty else self.df_result
+        if pat_df.empty or "Delta" not in pat_df.columns:
             return patterns
 
-        base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
+        base_label = "SOA Amount" if "SOA Amount" in pat_df.columns else "Master Amount"
 
         for ref_name in self.ref_names:
             amt_col = f"{ref_name} Amount"

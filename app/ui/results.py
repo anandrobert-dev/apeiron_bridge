@@ -90,19 +90,26 @@ class ResultsScreen(QWidget):
         self.schema_df = schema_df
         self.insights_data = insights
         
-        # Update Stats
+        # Update Stats — use df_result for total, insights summary for match/issue counts
         total = len(df)
-        disc_count = len(discrepancy_df) if discrepancy_df is not None and not discrepancy_df.empty else 0
         match_count = 0
         issue_count = 0
-        if discrepancy_df is not None and not discrepancy_df.empty and 'Status' in discrepancy_df.columns:
+
+        if insights and "summary" in insights:
+            summary = insights["summary"]
+            match_count = summary.get("match_count", 0)
+            issue_count = summary.get("discrepancy_count", 0)
+        elif discrepancy_df is not None and not discrepancy_df.empty and 'Status' in discrepancy_df.columns:
+            # Fallback: count from disc table
             match_count = len(discrepancy_df[discrepancy_df['Status'] == 'MATCH'])
-            issue_count = disc_count - match_count
-        
+            issue_count = len(discrepancy_df) - match_count
+
+        invoices = total  # df_result always has full set
         self.lbl_stats.setText(
-            f"Total Rows: {total}  |  Invoices: {disc_count}  |  "
+            f"Total Rows: {total}  |  Invoices: {invoices}  |  "
             f"Matches: {match_count}  |  Issues: {issue_count}"
         )
+
         
         # --- Tab 1: Detailed View ---
         self._populate_table(self.table_detail, df)
