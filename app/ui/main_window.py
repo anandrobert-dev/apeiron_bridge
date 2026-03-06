@@ -334,6 +334,17 @@ class MainWindow(QMainWindow):
                             ref_usecols.append(match_col)
                             
                         df = DataLoader.load_file(ref_path, usecols=ref_usecols)
+
+                        # CRITICAL FIX: If the file was loaded with a specific usecols list,
+                        # override return_cols to match the actual loaded columns.
+                        # Without this, return_cols may list columns that were never loaded,
+                        # causing the engine's subset filter to silently drop them.
+                        if ref_usecols is not None:
+                            return_cols = [c for c in df.columns.tolist() if c != match_col]
+                        elif not return_cols:
+                            # No explicit config — use all loaded columns except the match key
+                            return_cols = [c for c in df.columns.tolist() if c != match_col]
+
                         
                         # Use custom name if provided, otherwise Ref1/Ref2/...
                         custom_names = config.get("ref_custom_names", {})
