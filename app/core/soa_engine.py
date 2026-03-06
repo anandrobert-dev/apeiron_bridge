@@ -454,12 +454,30 @@ class SOAEngine:
                                 ref_target_col = f"{ref_name}_{ref_col}"
                                 
                                 if soa_target_col in row.index and ref_target_col in row.index:
-                                    soa_val = str(row[soa_target_col]).strip().lower() if pd.notna(row[soa_target_col]) else ""
-                                    ref_val = str(row[ref_target_col]).strip().lower() if pd.notna(row[ref_target_col]) else ""
+                                    soa_val = str(row[soa_target_col]).strip() if pd.notna(row[soa_target_col]) else ""
+                                    ref_val = str(row[ref_target_col]).strip() if pd.notna(row[ref_target_col]) else ""
                                     
                                     # Clean up common empty string representations
                                     soa_val = soa_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
                                     ref_val = ref_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
+
+                                    # BUG 2 FIX: Normalize date strings before comparing
+                                    # Handles formats: 2025-12-17, 17/12/2025, 12/17/2025, 2025/12/17 etc.
+                                    def _try_parse_date(s):
+                                        import re
+                                        s = s.strip()
+                                        # Try YYYY-MM-DD or YYYY/MM/DD
+                                        m = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', s)
+                                        if m:
+                                            return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                                        # Try DD/MM/YYYY or DD-MM-YYYY (day first is common in non-US)
+                                        m = re.match(r'^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$', s)
+                                        if m:
+                                            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+                                        return s.lower()
+                                    
+                                    soa_val = _try_parse_date(soa_val)
+                                    ref_val = _try_parse_date(ref_val)
                                     
                                     if soa_val and ref_val and soa_val != ref_val:
                                         # Check for partial match logic (e.g. CARDINAL vs CARDINAL LOGISTICS)
@@ -487,7 +505,10 @@ class SOAEngine:
             df_discrepancy.sort_values(by=['__sort__', 'Status', 'Delta'], inplace=True)
             df_discrepancy.drop(columns=['__sort__'], inplace=True)
 
-        # ==================================================================================
+            # BUG 1 FIX: Remove rows with MATCH status from the Discrepancy Report.
+            # The Discrepancy Report must ONLY show items that need attention.
+            df_discrepancy = df_discrepancy[df_discrepancy['Status'] != 'MATCH'].reset_index(drop=True)
+
         # --- 8. SCHEMA COMPARISON / LOGICAL CHECKER (Multi-File Only) ---
         # ==================================================================================
         self._report_progress(65, "Running schema comparison...")
@@ -568,12 +589,20 @@ class SOAEngine:
                                 continue
                             
                             # 2. All Data Present: Exact Match Check
-                            norm_set = set()
-                            for v in present_vals.values():
-                                if isinstance(v, (int, float)): 
-                                    norm_set.add(round(float(v), 2))
-                                else: 
-                                    norm_set.add(str(v).strip().upper())
+                            # BUG 2 FIX: Normalize date formats before comparing
+                            import re as _re
+                            def _normalize_schema_val(v):
+                                if isinstance(v, (int, float)):
+                                    return round(float(v), 2)
+                                s = str(v).strip().replace(" 00:00:00", "")
+                                m = _re.match(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$", s)
+                                if m:
+                                    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                                m = _re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$", s)
+                                if m:
+                                    return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+                                return s.upper()
+                            norm_set = set(_normalize_schema_val(v) for v in present_vals.values())
                             
                             if len(norm_set) == 1:
                                 status_list.append("MATCH")

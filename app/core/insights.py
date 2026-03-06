@@ -357,11 +357,15 @@ class ReconciliationInsights:
     # ─────────────────────────────────────────────────────────────
     def _source_reliability(self):
         """Compute per-reference-source quality metrics."""
-        if self.df_disc.empty or not self.ref_names:
+        if not self.ref_names:
+            return pd.DataFrame()
+        # Use df_result for coverage (df_disc is now only non-MATCH rows)
+        source_df = self.df_result if not self.df_result.empty else self.df_disc
+        if source_df.empty:
             return pd.DataFrame()
 
-        invoice_col = "Invoice #" if "Invoice #" in self.df_disc.columns else "ID / Key"
-        base_label = "SOA Amount" if "SOA Amount" in self.df_disc.columns else "Master Amount"
+        invoice_col = "Invoice #" if "Invoice #" in source_df.columns else "ID / Key"
+        base_label = "SOA Amount" if "SOA Amount" in source_df.columns else "Master Amount"
         
         rows = []
         for ref_name in self.ref_names:
@@ -369,10 +373,12 @@ class ReconciliationInsights:
             if amt_col not in self.df_disc.columns:
                 continue
 
-            ref_amounts = self.df_disc[amt_col]
-            soa_amounts = self.df_disc[base_label] if base_label in self.df_disc.columns else None
+            if amt_col not in source_df.columns:
+                continue
+            ref_amounts = source_df[amt_col]
+            soa_amounts = source_df[base_label] if base_label in source_df.columns else None
 
-            total_invoices = len(self.df_disc)
+            total_invoices = len(source_df)
             present = ref_amounts.notna().sum()
             missing = total_invoices - present
             coverage = round(present / total_invoices * 100, 1) if total_invoices > 0 else 0
