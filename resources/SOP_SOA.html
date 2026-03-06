@@ -177,9 +177,49 @@
     </div>
 
     <div class="step">
-        3. <strong>Export</strong><br>
-        Click <strong>"Export to Excel"</strong> to save to Downloads.
+        4. <strong>Export Reports to Excel</strong><br>
+        Click <strong>"Export to Excel"</strong> to generate a multi-tab workbook containing the full breakdown.
     </div>
+
+    <h2>Phase 4: Understanding The Insights Reports</h2>
+    <p>The system generates 5 advanced AI-driven dashboards. Here is the logic behind the figures:</p>
+
+    <h3 class="panel-blue">1. Executive Summary & KPIs</h3>
+    <ul>
+        <li><strong>Match Rate %:</strong> Total number of fully matched invoices divided by total SOA invoices.</li>
+        <li><strong>Discrepancy Value:</strong> The absolute sum of all financial differences (Deltas) between the Master and Reference files.</li>
+        <li><strong>Health Score (0-100):</strong> Starts at 100 and is penalized up to 20 points based on the ratio of discrepancy value vs. the total SOA financial value.</li>
+    </ul>
+
+    <h3 class="panel-pink">2. Risk Scoring (Invoice Level)</h3>
+    <p>Every mismatched invoice receives a <strong>Risk Score from 0 to 100</strong> indicating audit priority:</p>
+    <ul>
+        <li><strong>Delta Magnitude (40 pts):</strong> The larger the financial difference compared to the maximum discrepancy, the higher the score.</li>
+        <li><strong>Status Severity (25 pts):</strong> Missing records get max penalty (25 pts), while Partial Matches or minor mismatches get lower penalties (10-20 pts).</li>
+        <li><strong>Missing References (15 pts):</strong> Penalizes invoices that are completely missing from 1 or more expected reference files.</li>
+        <li><strong>Age (20 pts):</strong> Standard penalty logic applies to older unpaid invoices vs recent ones.</li>
+    </ul>
+
+    <h3 class="panel-green">3. Aging Analysis</h3>
+    <ul>
+        <li><strong>Bucketing:</strong> Invoices are grouped vertically into 30-day buckets (0-30, 31-60, 61-90, 121+).</li>
+        <li><strong>Risk Levels:</strong> 0-30 days is marked 🟢 Safe. Moving past 60 days elevates to 🔴 High Risk. This helps Treasury teams prioritize collections.</li>
+    </ul>
+
+    <h3 class="panel-blue">4. Source Reliability</h3>
+    <ul>
+        <li><strong>Coverage %:</strong> How many Master invoices actually exist in the reference file.</li>
+        <li><strong>Accuracy %:</strong> Of the invoices that do exist, what percentage match the Master amount perfectly.</li>
+        <li><strong>Grade (A+ to D):</strong> A+ requires >95% accuracy and >90% coverage. Grades drop dynamically based on missing data or bad amounts.</li>
+    </ul>
+
+    <h3 class="panel-pink">5. Pattern Detection</h3>
+    <p>The AI Engine scans all financial deltas to find hidden behaviors:</p>
+    <ul>
+        <li><strong>Systematic Offsets:</strong> If >80% of a file's invoices are consistently under/over by a specific margin, it flags a "Systematic Gap".</li>
+        <li><strong>Fixed Percentage Fees:</strong> Flags if discrepancies exactly match a fixed percentage (e.g., a hidden 2% platform fee).</li>
+        <li><strong>Estimations:</strong> Flags sources where >50% of the financial amounts end in '00' (indicating estimated instead of actual billing).</li>
+    </ul>
 
 </body>
 
