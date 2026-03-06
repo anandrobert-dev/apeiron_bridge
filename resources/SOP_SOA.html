@@ -106,32 +106,41 @@
 
     <div class="step">
         1. <strong>Launch the Module</strong><br>
-        On the Welcome Screen, locate the <strong>"SOA Reconciliation"</strong> card and click the green <span
+        On the Welcome Screen, locate the <strong>"SOA Reconciliation"</strong> card and click the blue <span
             class="highlight">Launch</span> button.
     </div>
 
     <div class="step">
-        2. <strong>Select Base File (SOA)</strong><br>
-        Click <strong>"Browse Base File"</strong> and select your primary Statement of Account (Excel/CSV).<br>
-        <span class="highlight">New:</span> The system will automatically detect and select the <strong>Date</strong>
-        and <strong>Amount</strong> columns for you.
+        2. <strong>Add Excel/CSV Files</strong><br>
+        Click the green <strong>"Add Excel/CSV Files"</strong> button to browse, or simply <strong>drag and drop</strong> your files anywhere onto the list area. You can add as many reference files as you need.
     </div>
 
     <div class="step">
-        3. <strong>Select Reference Files</strong><br>
-        Click <strong>"Add Reference File(s)"</strong> and select files to check against the SOA (e.g., Ref1, Ref2).<br>
-        Select the <strong>Match Key</strong> for each file (or let it auto-detect).
+        3. <strong>Set the MAIN File (SOA) & Properties</strong><br>
+        <ul>
+            <li>Click the <strong>Radio Button</strong> on the far left of the row you want to act as your primary SOA (Main file).</li>
+            <li>Once selected, the <strong>Date</strong> and <strong>Amount</strong> selection boxes will appear for that file. Select the appropriate columns.</li>
+            <li><span class="highlight">Tip:</span> You can type a custom name (e.g., "Main SOA") into the text box next to the radio button to rename the file for the report.</li>
+        </ul>
     </div>
 
     <div class="step">
-        4. <strong>Run Reconciliation (Recommended)</strong><br>
-        Click the green <strong>"▶ RUN RECONCILIATION"</strong> button to process immediately.<br>
+        4. <strong>Configure Reference Files & Ordering</strong><br>
+        <ul>
+            <li>For every other file in the list, select the column that matches the Master file using the <strong>Match Key / Join Column</strong> dropdown.</li>
+            <li><span class="highlight">Tip:</span> You can click and hold any file row to <strong>drag it up or down</strong> to change the sequence of the report columns.</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        5. <strong>Run Reconciliation (Recommended)</strong><br>
+        Click the purple <strong>"RUN RECONCILIATION"</strong> button to process immediately.<br>
         <div class="tip">This skips the mapping screen and auto-maps all columns!</div>
     </div>
 
     <div class="step">
-        5. <strong>Optional: Advance Mapping</strong><br>
-        Click <strong>"ADVANCE MAPPING >"</strong> only if you need fuzzy matching or to customize which columns are compared and exported.
+        6. <strong>Optional: Advance Mapping</strong><br>
+        Click the dark <strong>"ADVANCE MAPPING"</strong> button only if you need to build normalized schemas or filter specific columns before running.
     </div>
 
     <h2>Phase 2: Advance Mapping (Optional)</h2>
