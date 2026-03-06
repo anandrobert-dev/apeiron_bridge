@@ -340,6 +340,20 @@ class WelcomeScreen(QWidget):
             lbl_title.setStyleSheet("color: #DDD; font-weight: bold; font-size: 14px;")
             header_layout.addWidget(lbl_title)
             
+            header_layout.addStretch()
+            
+            # Application Language Toggle
+            from PySide6.QtWidgets import QComboBox
+            cbo_lang = QComboBox()
+            cbo_lang.addItems(["English", "हिन्दी (Hindi)"])
+            cbo_lang.setStyleSheet("""
+                QComboBox {
+                    background-color: #1E1E1E; color: #FFF; 
+                    border: 1px solid #444; padding: 2px 10px; border-radius: 4px;
+                }
+            """)
+            header_layout.addWidget(cbo_lang)
+
             layout.addWidget(header)
             
             text_edit = QTextEdit()
@@ -351,12 +365,33 @@ class WelcomeScreen(QWidget):
             base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             sop_path = os.path.join(base_dir, "resources", "SOP_SOA.html")
             
-            if os.path.exists(sop_path):
-                with open(sop_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                text_edit.setHtml(content)
-            else:
-                text_edit.setPlainText("SOP file not found.")
+            def load_language(idx):
+                if os.path.exists(sop_path):
+                    with open(sop_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    
+                    head_part = content.split("</head>")[0] + "</head>" if "</head>" in content else ""
+                    
+                    if idx == 0:
+                        start_tag = "<!-- ENGLISH_START -->"
+                        end_tag = "<!-- ENGLISH_END -->"
+                    else:
+                        start_tag = "<!-- HINDI_START -->"
+                        end_tag = "<!-- HINDI_END -->"
+                        
+                    start_idx = content.find(start_tag)
+                    end_idx = content.find(end_tag)
+                    
+                    if start_idx != -1 and end_idx != -1:
+                        body_part = content[start_idx + len(start_tag):end_idx]
+                        text_edit.setHtml("<html>" + head_part + "<body>" + body_part + "</body></html>")
+                    else:
+                        text_edit.setHtml(content)
+                else:
+                    text_edit.setPlainText("SOP file not found.")
+
+            cbo_lang.currentIndexChanged.connect(load_language)
+            load_language(0) # Load English by default
                 
             layout.addWidget(text_edit)
             

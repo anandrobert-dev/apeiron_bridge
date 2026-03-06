@@ -95,6 +95,7 @@
 </head>
 
 <body>
+<!-- ENGLISH_START -->
 
     <h1>Standard Operating Procedure (SOP)</h1>
     <p style="text-align: center; color: #888;">SOA Reconciliation Module</p>
@@ -220,6 +221,132 @@
         <li><strong>Fixed Percentage Fees:</strong> Flags if discrepancies exactly match a fixed percentage (e.g., a hidden 2% platform fee).</li>
         <li><strong>Estimations:</strong> Flags sources where >50% of the financial amounts end in '00' (indicating estimated instead of actual billing).</li>
     </ul>
+<!-- ENGLISH_END -->
+
+<!-- HINDI_START -->
+    <h1>मानक संचालन प्रक्रिया (SOP)</h1>
+    <p style="text-align: center; color: #888;">एसओए (SOA) समाधान मॉड्यूल</p>
+
+    <p><strong>Apeiron Bridge</strong> आपके खाते के विवरण (SOA) के मिलान को आसान बनाता है। अपने SOA का कई संदर्भ फ़ाइलों से मिलान करने के लिए इस मार्गदर्शिका का पालन करें।</p>
+
+    <h2>चरण 1: शुरुआत और फ़ाइल चयन</h2>
+
+    <div class="step">
+        1. <strong>मॉड्यूल लॉन्च करें</strong><br>
+        वेलकम स्क्रीन पर, <strong>"SOA Reconciliation"</strong> कार्ड खोजें और नीले <span class="highlight">Launch</span> बटन पर क्लिक करें।
+    </div>
+
+    <div class="step">
+        2. <strong>Excel/CSV फ़ाइलें जोड़ें</strong><br>
+        ब्राउज़ करने के लिए हरे <strong>"Add Excel/CSV Files"</strong> बटन पर क्लिक करें, या बस अपनी फ़ाइलों को सूची क्षेत्र में कहीं भी <strong>खींचें और छोड़ें (drag and drop)</strong>। आप जितनी चाहें उतनी संदर्भ फ़ाइलें जोड़ सकते हैं।
+    </div>
+
+    <div class="step">
+        3. <strong>मुख्य फ़ाइल (SOA) और प्रॉपर्टीज़ सेट करें</strong><br>
+        <ul>
+            <li>जिस पंक्ति को आप अपना प्राथमिक SOA (मुख्य फ़ाइल) बनाना चाहते हैं, उसके सबसे बाईं ओर स्थित <strong>Radio Button</strong> पर क्लिक करें।</li>
+            <li>एक बार चुने जाने के बाद, उस फ़ाइल के लिए <strong>Date (दिनांक)</strong> और <strong>Amount (राशि)</strong> चयन बॉक्स दिखाई देंगे। उचित कॉलम चुनें।</li>
+            <li><span class="highlight">सुझाव:</span> रिपोर्ट के लिए फ़ाइल का नाम बदलने के लिए आप रेडियो बटन के बगल में स्थित टेक्स्ट बॉक्स में एक कस्टम नाम (जैसे, "Main SOA") टाइप कर सकते हैं।</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        4. <strong>संदर्भ फ़ाइलें और उनका क्रम कॉन्फ़िगर करें</strong><br>
+        <ul>
+            <li>सूची में मौजूद हर दूसरी फ़ाइल के लिए, <strong>Match Key / Join Column</strong> ड्रॉपडाउन का उपयोग करके उस कॉलम का चयन करें जो मास्टर फ़ाइल से मेल खाता है।</li>
+            <li><span class="highlight">सुझाव:</span> रिपोर्ट कॉलम के क्रम को बदलने के लिए आप किसी भी फ़ाइल पंक्ति पर <strong>क्लिक कर उसे ऊपर या नीचे खींच (drag)</strong> सकते हैं।</li>
+        </ul>
+    </div>
+
+    <div class="step">
+        5. <strong>समाधान चलाएं (अनुशंसित)</strong><br>
+        तुरंत प्रोसेस करने के लिए बैंगनी रंग के <strong>"RUN RECONCILIATION"</strong> बटन पर क्लिक करें।<br>
+        <div class="tip">यह मैपिंग स्क्रीन को छोड़ देता है और सभी कॉलमों को अपने आप मैप कर देता है!</div>
+    </div>
+
+    <div class="step">
+        6. <strong>वैकल्पिक: एडवांस मैपिंग (Advance Mapping)</strong><br>
+        डार्क <strong>"ADVANCE MAPPING"</strong> बटन पर केवल तभी क्लिक करें जब आपको नॉर्मलाइज़्ड स्कीमा (normalized schemas) बनाने या चलने से पहले विशिष्ट कॉलमों को फ़िल्टर करने की आवश्यकता हो।
+    </div>
+
+    <h2>चरण 2: एडवांस मैपिंग (वैकल्पिक)</h2>
+    <p>इसका उपयोग केवल तभी किया जाता है जब आपने "ADVANCE MAPPING" पर क्लिक किया हो।</p>
+
+    <h3 class="panel-blue">1. बेस फ़ाइल कॉन्फ़िगर करें (बायां पैनल)</h3>
+    <ul>
+        <li><strong>बेस फ़ाइल कॉलम्स:</strong> अपने चयन की समीक्षा करें (Date/Amount यहाँ केवल पढ़े जा सकते हैं)।</li>
+    </ul>
+
+    <h3 class="panel-green">2. संदर्भ फ़ाइलें कॉन्फ़िगर करें (मध्य पैनल)</h3>
+    <ul>
+        <li><strong>संदर्भ फ़ाइल चुनें:</strong> फ़ाइल चुनने के लिए ड्रॉपडाउन का उपयोग करें।</li>
+        <li><strong>मिलान कॉलम (Match Column):</strong> मिलान करने वाले कॉलम को सत्यापित करें।</li>
+        <li><strong>रिटर्न कॉलम्स (Return Columns):</strong> जिन कॉलमों को आप रिपोर्ट में नहीं चाहते हैं, उन्हें अनचेक करें।</li>
+    </ul>
+
+    <h3 class="panel-pink">3. निष्पादन और स्कीमा कॉन्फ़िगरेशन (दायां पैनल)</h3>
+    <ul>
+        <li><strong>फ़ज़ी मैच (Fuzzy Match):</strong> यदि आईडी (IDs) अव्यवस्थित हैं (जैसे, INV-100 बनाम 100) तो इसे चालू करें।</li>
+        <li><strong>स्कीमा कॉन्फ़िगरेशन:</strong> 'नॉर्मलाइज़्ड तुलना' (Normalized Comparison) रिपोर्ट उत्पन्न करने के लिए मास्टर नामों को संदर्भ नामों से मैप करें।</li>
+    </ul>
+
+    <h2>चरण 3: निष्पादन और समीक्षा</h2>
+
+    <div class="step">
+        1. <strong>समाधान चलाएं (Run Reconciliation)</strong><br>
+        <span class="highlight">Run Reconciliation</span> बटन (नीचे दाईं ओर) पर क्लिक करें।
+    </div>
+
+    <div class="step">
+        2. <strong>परिणाम देखें</strong><br>
+        टैब जांचें: <strong>Detailed View</strong> (पूरा डेटा) और <strong>Discrepancy Report</strong> (अंतर/Variances)।
+    </div>
+
+    <div class="step">
+        3. <strong>एक्सेल में निर्यात करें (Export)</strong><br>
+        पूर्ण ब्रेकडाउन वाला मल्टी-टैब वर्कबुक (workbook) उत्पन्न करने के लिए <strong>"Export to Excel"</strong> पर क्लिक करें।
+    </div>
+
+    <h2>चरण 4: इनसाइट्स रिपोर्ट (Insights Reports) को समझना</h2>
+    <p>सिस्टम 5 उन्नत AI-संचालित डैशबोर्ड उत्पन्न करता है। यहाँ आंकड़ों के पीछे का तर्क (logic) दिया गया है:</p>
+
+    <h3 class="panel-blue">1. कार्यकारी सारांश (Executive Summary) और KPIs</h3>
+    <ul>
+        <li><strong>मिलान दर (Match Rate) %:</strong> पूरी तरह से मेल खाने वाले इनवॉइस की कुल संख्या को कुल SOA इनवॉइस से विभाजित किया जाता है।</li>
+        <li><strong>विसंगति मूल्य (Discrepancy Value):</strong> मास्टर और संदर्भ फ़ाइलों के बीच सभी वित्तीय अंतरों (डेल्टा) का पूर्ण योग।</li>
+        <li><strong>स्वास्थ्य स्कोर (Health Score) (0-100):</strong> यह 100 से शुरू होता है और कुल SOA वित्तीय मूल्य की तुलना में विसंगति मूल्य के अनुपात के आधार पर 20 अंक तक काट (penalize) लिए जाते हैं।</li>
+    </ul>
+
+    <h3 class="panel-pink">2. जोखिम स्कोरिंग (इनवॉइस स्तर)</h3>
+    <p>हर बेमेल (mismatched) इनवॉइस को ऑडिट प्राथमिकता दिखाने के लिए <strong>0 से 100 तक का जोखिम स्कोर (Risk Score)</strong> मिलता है:</p>
+    <ul>
+        <li><strong>डेल्टा परिमाण (Delta Magnitude) (40 अंक):</strong> अधिकतम विसंगति की तुलना में वित्तीय अंतर जितना बड़ा होगा, स्कोर उतना ही अधिक होगा।</li>
+        <li><strong>स्थिति गंभीरता (Status Severity) (25 अंक):</strong> गुम रिकॉर्ड्स को अधिकतम दंड (25 अंक) मिलता है, जबकि आंशिक मिलान या मामूली विसंगतियों को कम दंड (10-20 अंक) मिलता है।</li>
+        <li><strong>अनुपलब्ध संदर्भ (Missing References) (15 अंक):</strong> उन इनवॉइस को दंडित करता है जो 1 या अधिक अपेक्षित संदर्भ फ़ाइलों से पूरी तरह से गायब हैं।</li>
+        <li><strong>आयु (Age) (20 अंक):</strong> पुराने बकाया इनवॉइस बनाम हाल के इनवॉइस पर मानक दंड प्रणाली लागू होती है।</li>
+    </ul>
+
+    <h3 class="panel-green">3. आयु विश्लेषण (Aging Analysis)</h3>
+    <ul>
+        <li><strong>बकेटिंग:</strong> इनवॉइस को लंबवत रूप से 30-दिन के बकेट (0-30, 31-60, 61-90, 121+) में बांटा गया है।</li>
+        <li><strong>जोखिम स्तर:</strong> 0-30 दिनों को 🟢 सुरक्षित (Safe) चिह्नित किया गया है। 60 दिन पार करने पर 🔴 उच्च जोखिम (High Risk) हो जाता है। इससे ट्रेजरी (Treasury) टीमों को संग्रह को प्राथमिकता देने में मदद मिलती है।</li>
+    </ul>
+
+    <h3 class="panel-blue">4. स्रोत विश्वसनीयता (Source Reliability)</h3>
+    <ul>
+        <li><strong>कवरेज (Coverage) %:</strong> संदर्भ फ़ाइल में वास्तव में कितने मास्टर इनवॉइस मौजूद हैं।</li>
+        <li><strong>सटीकता (Accuracy) %:</strong> जो इनवॉइस मौजूद हैं, उनमें से कितने प्रतिशत मास्टर राशि से पूरी तरह मेल खाते हैं।</li>
+        <li><strong>ग्रेड (A+ से D):</strong> A+ के लिए >95% सटीकता और >90% कवरेज की आवश्यकता होती है। गायब डेटा या गलत राशियों के आधार पर ग्रेड गतिशील रूप से गिरते हैं।</li>
+    </ul>
+
+    <h3 class="panel-pink">5. पैटर्न का पता लगाना (Pattern Detection)</h3>
+    <p>AI इंजन छिपे हुए व्यवहार का पता लगाने के लिए सभी वित्तीय डेल्टा को स्कैन करता है:</p>
+    <ul>
+        <li><strong>व्यवस्थित अंतर (Systematic Offsets):</strong> यदि किसी फ़ाइल के >80% इनवॉइस लगातार एक विशिष्ट मार्जिन से कम/अधिक हैं, तो यह "व्यवस्थित अंतराल" (Systematic Gap) को फ़्लैग करता है।</li>
+        <li><strong>निश्चित प्रतिशत शुल्क:</strong> यह ध्वजांकित करता है कि क्या विसंगतियां वास्तव में एक निश्चित प्रतिशत (जैसे, छिपी हुई 2% प्लेटफ़ॉर्म शुल्क) से मेल खाती हैं।</li>
+        <li><strong>अनुमान (Estimations):</strong> उन स्रोतों को फ़्लैग करता है जहां >50% वित्तीय राशियाँ '00' में समाप्त होती हैं (जो वास्तविक बिलिंग के बजाय अनुमानित को दर्शाता है)।</li>
+    </ul>
+<!-- HINDI_END -->
 
 </body>
 
