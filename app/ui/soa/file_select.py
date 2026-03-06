@@ -253,6 +253,10 @@ class SOAFileSelectScreen(QWidget):
 
         # SOA Config Container
         soa_config_container = QWidget()
+        soa_config_container.setFixedWidth(270)
+        sp = soa_config_container.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        soa_config_container.setSizePolicy(sp)
         soa_config_container.setVisible(path == self.current_soa_path)
         soa_config_layout = QHBoxLayout(soa_config_container)
         soa_config_layout.setContentsMargins(0, 0, 0, 0)
@@ -300,10 +304,11 @@ class SOAFileSelectScreen(QWidget):
         lbl_details.setStyleSheet("font-size: 11px;")
         info_layout.addWidget(lbl_details)
 
-        # Match Key Selection
-        lbl_key = QLabel("Match Key / Join Column:")
+        # Match Key / ID Selection
+        title_text = "Master ID Column:" if path == self.current_soa_path else "Match Key to Master:"
+        lbl_key = QLabel(title_text)
         lbl_key.setObjectName("SubTitle")
-        lbl_key.setStyleSheet("font-size: 10px;")
+        lbl_key.setStyleSheet("font-size: 10px; font-weight: bold; color: #BBB;")
         combo_key = QComboBox()
         combo_key.setMinimumWidth(140)
         # No hardcoded colors — inherit from QSS theme
@@ -326,6 +331,7 @@ class SOAFileSelectScreen(QWidget):
         btn_config = QPushButton("⚙ Configure Columns")
         btn_config.setToolTip("Select specific columns to use (Pivot Style)")
         btn_config.setCursor(Qt.PointingHandCursor)
+        btn_config.setFixedWidth(170)
         if path in self.file_column_config:
             count = len(self.file_column_config[path])
             btn_config.setText(f"✔ Configured ({count} cols)")
@@ -333,27 +339,46 @@ class SOAFileSelectScreen(QWidget):
         else:
             btn_config.setStyleSheet("QPushButton { background-color: #3f51b5; color: white; border: none; padding: 6px 12px; border-radius: 4px; } QPushButton:hover { background-color: #5c6bc0; }")
         btn_config.clicked.connect(lambda checked=False, p=path, b=btn_config: self.open_column_config(p, b))
-        
-        # Layout Assembly
-        layout.addWidget(radio_soa)
-        layout.addSpacing(15)
-        layout.addWidget(edit_name)
-        layout.addSpacing(10)
-        layout.addLayout(info_layout, 1)
-        layout.addSpacing(15)
-        layout.addWidget(soa_config_container)
-        layout.addSpacing(15)
-        
-        match_key_layout_v = QVBoxLayout()
+
+        # Match Key container widget (fixed col width)
+        match_key_container = QWidget()
+        match_key_container.setFixedWidth(155)
+        match_key_layout_v = QVBoxLayout(match_key_container)
+        match_key_layout_v.setContentsMargins(0, 0, 0, 0)
         match_key_layout_v.setSpacing(2)
         match_key_layout_v.addWidget(lbl_key)
         match_key_layout_v.addWidget(combo_key)
-        layout.addLayout(match_key_layout_v)
         
-        layout.addSpacing(15)
-        layout.addWidget(btn_config)
-        
-        widget.setLayout(layout)
+        # ── Layout Assembly – strict fixed-column grid ──────────────────
+        # Use a QGridLayout so every row has the SAME column widths.
+        # Col 0: radio (32)  Col 1: name edit (110)  Col 2: file info (stretch)
+        # Col 3: soa date/amount panel (270, retained hidden)
+        # Col 4: match key (155)  Col 5: configure btn (170)
+        from PySide6.QtWidgets import QGridLayout, QSizePolicy as QSP
+        grid = QGridLayout(widget)
+        grid.setContentsMargins(10, 6, 10, 6)
+        grid.setSpacing(10)
+
+        # Fix column widths so they never flex
+        grid.setColumnMinimumWidth(0, 32)
+        grid.setColumnMinimumWidth(1, 110)
+        grid.setColumnStretch(2, 1)        # file name stretches
+        grid.setColumnMinimumWidth(3, 270) # date/amount panel — always same width
+        grid.setColumnMinimumWidth(4, 155)
+        grid.setColumnMinimumWidth(5, 170)
+
+        # ── Wrap the file info layout in a plain QWidget ──
+        info_container = QWidget()
+        info_container.setLayout(info_layout)
+
+        grid.addWidget(radio_soa,            0, 0, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(edit_name,            0, 1, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(info_container,       0, 2, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(soa_config_container, 0, 3, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(match_key_container,  0, 4, 2, 1, Qt.AlignVCenter)
+        grid.addWidget(btn_config,           0, 5, 2, 1, Qt.AlignVCenter)
+
+        widget.setLayout(grid)
         item.setSizeHint(widget.sizeHint() +  PySide6.QtCore.QSize(0, 10))
         if item.sizeHint().height() < 80:
             item.setSizeHint(PySide6.QtCore.QSize(item.sizeHint().width(), 80))
