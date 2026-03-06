@@ -391,11 +391,18 @@ class ResultsScreen(QWidget):
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
         
+        # Calculate exact height to avoid nested scrollbar
+        total_height = table.horizontalHeader().height() + 2
+        for r in range(table.rowCount()):
+            total_height += table.rowHeight(r)
+        table.setMinimumHeight(total_height + 4)
+        table.setMaximumHeight(total_height + 4)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
-        table.setMaximumHeight(min(300, 45 + len(data_list) * 35))
         layout.addWidget(table)
         layout.addStretch()
         return container
@@ -447,11 +454,18 @@ class ResultsScreen(QWidget):
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
         
+        # Calculate exact height to avoid nested scrollbar
+        total_height = table.horizontalHeader().height() + 2
+        for r in range(table.rowCount()):
+            total_height += table.rowHeight(r)
+        table.setMinimumHeight(total_height + 4)
+        table.setMaximumHeight(total_height + 4)
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
         container = QWidget()
         layout = QHBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         table.setMinimumWidth(min(1200, table.horizontalHeader().length() + 30))
-        table.setMaximumHeight(min(400, 45 + len(df) * 35))
         layout.addWidget(table)
         layout.addStretch()
         return container

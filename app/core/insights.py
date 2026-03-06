@@ -413,57 +413,77 @@ class ReconciliationInsights:
                     break
         
         rows = []
+        rows = []
         for ref_name in self.ref_names:
-            amt_col = f"{ref_name} Amount" if source_df is self.df_disc else f"{ref_name}_{base_label}"
-            if amt_col not in source_df.columns:
-                # Try finding any column with the ref_name and amount in it
-                for col in source_df.columns:
-                    if ref_name.lower() in col.lower() and ('amount' in col.lower() or 'total' in col.lower()):
-                        amt_col = col
-                        break
-            
-            if amt_col not in source_df.columns:
-                continue
-
-            ref_amounts = source_df[amt_col]
-            soa_amounts = source_df[base_label] if base_label in source_df.columns else None
-
+            # 1. Identify all columns belonging to this reference source
+            ref_cols = [c for c in source_df.columns if str(c).startswith(f"{ref_name}_") or str(c).startswith(f"{ref_name} ")]
+            if not ref_cols:
+                continue # this source doesn't exist in the output at all
+                
             total_invoices = len(source_df)
-            present = ref_amounts.notna().sum()
+            
+            # 2. Determine Coverage based on first available ref column (ideally not empty)
+            # If all mapped columns for a row are NaN, the reference is missing for that invoice
+            is_present = source_df[ref_cols].notna().any(axis=1)
+            present = int(is_present.sum())
             missing = total_invoices - present
             coverage = round(present / total_invoices * 100, 1) if total_invoices > 0 else 0
 
-            # Accuracy: % of present entries that match SOA
-            exact_match = 0
-            avg_deviation = 0.0
-            if soa_amounts is not None and present > 0:
+            # 3. Try to find the amount column for accuracy evaluation
+            amt_col = f"{ref_name} Amount" if source_df is self.df_disc else f"{ref_name}_{base_label}"
+            if amt_col not in source_df.columns:
+                for col in ref_cols:
+                    if 'amount' in col.lower() or 'total' in col.lower() or 'value' in col.lower():
+                        amt_col = col
+                        break
+
+            # 4. Compute Accuracy if amount column exists
+            accuracy = "N/A"
+            exact_match = "N/A"
+            avg_deviation = "N/A"
+            
+            if amt_col in source_df.columns and base_label in source_df.columns:
+                ref_amounts = pd.to_numeric(source_df[amt_col], errors='coerce')
+                soa_amounts = pd.to_numeric(source_df[base_label], errors='coerce')
+                
                 both_present = ref_amounts.notna() & soa_amounts.notna()
                 if both_present.sum() > 0:
-                    deltas = (soa_amounts[both_present] - ref_amounts[both_present]).abs()
-                    exact_match = int((deltas < 0.01).sum())
-                    avg_deviation = round(deltas.mean(), 2)
-
-            accuracy = round(exact_match / present * 100, 1) if present > 0 else 0
-
-            # Reliability Grade
-            if accuracy >= 95 and coverage >= 90:
-                grade = "A+"
-            elif accuracy >= 90 and coverage >= 80:
-                grade = "A"
-            elif accuracy >= 80 and coverage >= 70:
-                grade = "B"
-            elif accuracy >= 70:
-                grade = "C"
+                    try:
+                        deltas = (soa_amounts[both_present] - ref_amounts[both_present]).abs()
+                        exact_match = int((deltas < 0.01).sum())
+                        avg_deviation = round(deltas.mean(), 2)
+                        
+                        valid_amts = int(both_present.sum())
+                        accuracy = round(exact_match / valid_amts * 100, 1) if valid_amts > 0 else 0
+                    except Exception:
+                        pass
+                        
+            # 5. Determine Grade
+            if accuracy == "N/A":
+                # Grade purely on coverage since we can't measure amount accuracy
+                if coverage >= 95: grade = "A"
+                elif coverage >= 80: grade = "B"
+                elif coverage >= 60: grade = "C"
+                else: grade = "D"
             else:
-                grade = "D"
+                if isinstance(accuracy, (int, float)):
+                    if accuracy >= 95 and coverage >= 90: grade = "A+"
+                    elif accuracy >= 90 and coverage >= 80: grade = "A"
+                    elif accuracy >= 80 and coverage >= 70: grade = "B"
+                    elif accuracy >= 70: grade = "C"
+                    else: grade = "D"
+                else:
+                    grade = "C"
+
+            acc_str = f"{accuracy}%" if isinstance(accuracy, (int, float)) else accuracy
 
             rows.append({
                 "Source": ref_name,
                 "Coverage": f"{coverage}%",
-                "Present": int(present),
-                "Missing": int(missing),
+                "Present": present,
+                "Missing": missing,
                 "Exact Matches": exact_match,
-                "Accuracy": f"{accuracy}%",
+                "Accuracy": acc_str,
                 "Avg Deviation": avg_deviation,
                 "Grade": grade
             })
