@@ -301,7 +301,16 @@ class ResultsScreen(QWidget):
                 lay_stat.addWidget(self._create_simple_table(stat_items))
                 insights_tabs.addTab(page_stat, "📐 Statistical Analysis")
 
-        # ── TAB 5: AGING ANALYSIS ──
+        # ── TAB 5: RISK ANALYSIS ──
+        risk_df = insights.get("risk_scores", pd.DataFrame())
+        if not isinstance(risk_df, pd.DataFrame): risk_df = pd.DataFrame()
+        if not risk_df.empty:
+            page_risk, lay_risk = create_tab_page()
+            lay_risk.addWidget(self._make_section("Risk Analysis", "Invoice-level risk scoring based on discrepancies, age, and missing references."))
+            lay_risk.addWidget(self._create_df_table(risk_df))
+            insights_tabs.addTab(page_risk, "🚨 Risk Analysis")
+
+        # ── TAB 6: AGING ANALYSIS ──
         aging_data = insights.get("aging", pd.DataFrame())
         if not isinstance(aging_data, pd.DataFrame): aging_data = pd.DataFrame()
         if not aging_data.empty:

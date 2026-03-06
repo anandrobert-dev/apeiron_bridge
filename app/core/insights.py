@@ -264,9 +264,17 @@ class ReconciliationInsights:
         if data_df.empty:
             return {"outliers": pd.DataFrame(), "stats": {}}
 
-        base_label = "SOA Amount" if "SOA Amount" in data_df.columns else "Master Amount"
-        if base_label not in data_df.columns:
-            return {"outliers": pd.DataFrame(), "stats": {}}
+        base_label = self.amount_col if data_df is self.df_result else ("SOA Amount" if "SOA Amount" in data_df.columns else "Master Amount")
+        if not base_label or base_label not in data_df.columns:
+            # Fallback search
+            found = False
+            for col in data_df.columns:
+                if 'amount' in col.lower() or 'total' in col.lower() or 'balance' in col.lower():
+                    base_label = col
+                    found = True
+                    break
+            if not found:
+                return {"outliers": pd.DataFrame(), "stats": {}}
 
         amounts = data_df[base_label].dropna()
         if len(amounts) < 4:
@@ -381,13 +389,26 @@ class ReconciliationInsights:
             return pd.DataFrame()
 
         invoice_col = "Invoice #" if "Invoice #" in source_df.columns else "ID / Key"
-        base_label = "SOA Amount" if "SOA Amount" in source_df.columns else "Master Amount"
+        base_label = self.amount_col if source_df is self.df_result else ("SOA Amount" if "SOA Amount" in source_df.columns else "Master Amount")
+        if not base_label or base_label not in source_df.columns:
+            for col in source_df.columns:
+                if 'amount' in col.lower() or 'total' in col.lower() or 'balance' in col.lower():
+                    base_label = col
+                    break
         
         rows = []
         for ref_name in self.ref_names:
-            amt_col = f"{ref_name} Amount"
+            amt_col = f"{ref_name} Amount" if source_df is self.df_disc else f"{ref_name}_{base_label}"
+            if amt_col not in source_df.columns:
+                # Try finding any column with the ref_name and amount in it
+                for col in source_df.columns:
+                    if ref_name.lower() in col.lower() and ('amount' in col.lower() or 'total' in col.lower()):
+                        amt_col = col
+                        break
+            
             if amt_col not in source_df.columns:
                 continue
+
             ref_amounts = source_df[amt_col]
             soa_amounts = source_df[base_label] if base_label in source_df.columns else None
 
