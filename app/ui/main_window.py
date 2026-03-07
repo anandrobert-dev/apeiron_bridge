@@ -5,7 +5,6 @@ from app.ui.multi.file_select import MultiFileSelectScreen
 from app.ui.multi.mapping import MultiMappingScreen
 from app.ui.quick_match.csv_match import QuickMatchScreen
 from .results import ResultsScreen
-from ..core.engine import MatchingEngine
 from ..core.soa_engine import SOAEngine
 from ..core.worker import ReconciliationWorker
 from app.core.data_loader import DataLoader
@@ -193,14 +192,14 @@ class MainWindow(QMainWindow):
             
             # Load Base File
             base_usecols = self.current_column_config.get(base_file)
-            df_base = DataLoader.load_file(base_file, usecols=base_usecols)
+            df_base = DataLoader.load_file_cached(base_file, usecols=base_usecols)
             base_cols = list(df_base.columns.astype(str))
             
             # Load Ref Files
             ref_cols_dict = {}
             for ref in ref_files:
                 ref_usecols = self.current_column_config.get(ref)
-                df_ref = DataLoader.load_file(ref, usecols=ref_usecols)
+                df_ref = DataLoader.load_file_cached(ref, usecols=ref_usecols)
                 ref_cols_dict[ref] = list(df_ref.columns.astype(str))
             
             # SOA Screen accepts extra args, Multi screen might not (but kwargs safe if we check target type or just pass)
@@ -269,22 +268,9 @@ class MainWindow(QMainWindow):
             # Get Schema Config
             schema_config = config.get("schema_config", [])
             
-            # Helper to consolidate required columns for schema
-            # {ref_basename: set(columns)}
-            schema_cols_map = {}
-            if schema_config:
-                for field in schema_config:
-                    mappings = field.get("mappings", {})
-                    for ref_path, col_name in mappings.items():
-                        if col_name:
-                            ref_base = os.path.basename(ref_path)
-                            if ref_base not in schema_cols_map:
-                                schema_cols_map[ref_base] = set()
-                            schema_cols_map[ref_base].add(col_name)
 
             ref_configs = []
             path_to_name_map = {}
-            import pandas as pd
             
             for ref_path, rule in mapping_rules.items():
                 ref_display = os.path.basename(ref_path)
@@ -333,7 +319,7 @@ class MainWindow(QMainWindow):
                             ref_usecols = list(ref_usecols)
                             ref_usecols.append(match_col)
                             
-                        df = DataLoader.load_file(ref_path, usecols=ref_usecols)
+                        df = DataLoader.load_file_cached(ref_path, usecols=ref_usecols)
 
                         # CRITICAL FIX: If the file was loaded with a specific usecols list,
                         # override return_cols to match the actual loaded columns.
@@ -378,7 +364,7 @@ class MainWindow(QMainWindow):
                      base_usecols = list(base_usecols)
                      base_usecols.append(soa_match_col)
                  
-                 soa_df = DataLoader.load_file(soa_path, usecols=base_usecols)
+                 soa_df = DataLoader.load_file_cached(soa_path, usecols=base_usecols)
                  path_to_name_map[soa_path] = "SOA" # Ensure schema engine can label it
             except Exception as e:
                  print(f"Error loading SOA {soa_path}: {e}")

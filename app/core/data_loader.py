@@ -35,6 +35,45 @@ class DataLoader:
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 
+    _df_cache = {}
+
+    @classmethod
+    def load_file_cached(cls, file_path: str, sheet_name: str = None, usecols: list = None) -> pd.DataFrame:
+        """
+        Loads a file with mtime-based caching.
+        Returns a COPY of the cached DataFrame to prevent mutation of the cache.
+        Cache key includes path + usecols to handle different column selections.
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        try:
+            mtime = os.path.getmtime(file_path)
+            # Cache key includes usecols so different column selections are cached separately
+            usecols_key = tuple(sorted(usecols)) if usecols else None
+            cache_key = (file_path, sheet_name, usecols_key)
+
+            if cache_key in cls._df_cache:
+                cached_mtime, cached_df = cls._df_cache[cache_key]
+                if cached_mtime == mtime:
+                    return cached_df.copy()
+
+            df = cls.load_file(file_path, sheet_name=sheet_name, usecols=usecols)
+            cls._df_cache[cache_key] = (mtime, df)
+            return df.copy()
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            print(f"Cache load error for {file_path}, falling back to direct load: {e}")
+            return cls.load_file(file_path, sheet_name=sheet_name, usecols=usecols)
+
+    @classmethod
+    def clear_cache(cls):
+        """Clear all cached DataFrames and headers."""
+        cls._df_cache.clear()
+        cls._header_cache.clear()
+
+
     _header_cache = {}
 
     @classmethod

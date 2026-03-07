@@ -570,30 +570,41 @@ class ResultsScreen(QWidget):
         clr_green_text = pal['green_text']
         clr_amber_bg = pal['amber_bg']
         clr_amber_text = pal['amber_text']
+        clr_default_text = pal.get('default_text', QColor("#E0E0E0"))
         
-        for col_idx, col_name in enumerate(cols):
-            if "Status" in col_name:
-                for row_idx in range(min(len(df), 200)):
-                    val = str(df.iloc[row_idx, col_idx])
-                    item = table.item(row_idx, col_idx)
+        for row_idx in range(min(len(df), 200)):
+            for col_idx, col_name in enumerate(cols):
+                item = table.item(row_idx, col_idx)
+                if not item:
+                    continue
                     
-                    if item:
-                        if "MISMATCH" in val:
-                            item.setBackground(QBrush(clr_red_bg))
-                            item.setForeground(QBrush(clr_red_text))
-                        elif "MATCH" in val and "PARTIAL" not in val:
-                            item.setBackground(QBrush(clr_green_bg))
-                            item.setForeground(QBrush(clr_green_text))
-                        elif "PARTIAL" in val:
-                            item.setBackground(QBrush(clr_amber_bg))
-                            item.setForeground(QBrush(clr_amber_text))
+                if "Status" in col_name:
+                    val = str(df.iloc[row_idx, col_idx])
+                    if "MISMATCH" in val:
+                        item.setBackground(QBrush(clr_red_bg))
+                        item.setForeground(QBrush(clr_red_text))
+                    elif "MATCH" in val and "PARTIAL" not in val:
+                        item.setBackground(QBrush(clr_green_bg))
+                        item.setForeground(QBrush(clr_green_text))
+                    elif "PARTIAL" in val:
+                        item.setBackground(QBrush(clr_amber_bg))
+                        item.setForeground(QBrush(clr_amber_text))
+                    else:
+                        item.setForeground(QBrush(clr_default_text))
+                else:
+                    # Ensure non-status cells have readable text color
+                    item.setForeground(QBrush(clr_default_text))
 
     def _get_theme_palette(self):
         """Returns a dynamic color palette based on current theme."""
         is_dark = True
-        main_win = self.window()
-        if hasattr(main_win, 'current_theme'):
-             is_dark = (main_win.current_theme == "dark")
+        # Walk up the parent chain to find the MainWindow with current_theme
+        widget = self
+        while widget is not None:
+            if hasattr(widget, 'current_theme'):
+                is_dark = (widget.current_theme == "dark")
+                break
+            widget = widget.parent()
         
         if is_dark:
             return {
@@ -607,6 +618,7 @@ class ResultsScreen(QWidget):
                 'amber_text': QColor("#FFE082"),
                 'row_match_tint': QColor("#1B2A1B"),
                 'row_error_tint': QColor("#2A1B1B"),
+                'default_text': QColor("#E0E0E0"),
             }
         else:
             return {
@@ -620,6 +632,7 @@ class ResultsScreen(QWidget):
                 'amber_text': QColor("#EF6C00"),
                 'row_match_tint': QColor("#F1F8E9"),
                 'row_error_tint': QColor("#FFEBEE"),
+                'default_text': QColor("#1A1A1A"),
             }
 
     def export_data(self):

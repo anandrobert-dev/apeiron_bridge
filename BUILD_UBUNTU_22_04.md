@@ -1,76 +1,123 @@
-# Apeiron Bridge: Standalone App Build Guide (Ubuntu 22.04)
+# 🚀 Deployment Guide: Building on Ubuntu 22.04
 
-This guide explains how to bundle the Apeiron Bridge application into a standalone executable package specifically for **Ubuntu 22.04**.
+To ensure your app works on all field machines, you must build it on your **Ubuntu 22.04** machine to avoid `glibc` backward-compatibility issues.
 
-> [!WARNING]
-> **Important Note on `glibc` Compatibility**
-> If you develop the app on Ubuntu 24.04, building the executable on that machine will link it against a newer `glibc` version (v2.39+). This binary **will fail to run** on Ubuntu 22.04 (which uses `glibc` v2.35).
-> 
-> **To create a standalone app for Ubuntu 22.04, you MUST run the build process on an actual Ubuntu 22.04 system (e.g., a physical machine, a Virtual Machine, or a Docker container).**
+## 📦 Step 1: Copy Files to Flash Drive
+
+Create a new folder on your flash drive (e.g., `Apeiron_Bridge_Source`) and copy **ONLY** these files and folders into it.
+
+### ✅ Folders to Copy
+
+* `app/`
+* `resources/`
+
+### ✅ Files to Copy
+
+* `main.py`
+* `requirements.txt`
+* `APIERON.png` (The main logo in root folder)
+* `install.sh` (We will need this later)
+* `uninstall.sh`
+
+### ❌ DO NOT Copy (Skip these)
+
+* `venv/`
+* `build/`
+* `dist/`
+* `.git/`
+* `__pycache__/` folders
+* `tests/`
+* `output/`
 
 ---
 
-## Step 1: Prepare the Ubuntu 22.04 Environment
+## 🛠️ Step 2: Set Up on Ubuntu 22.04
 
-On your Ubuntu 22.04 machine, clone the repository containing the fully updated source code.
+1. **Paste the Folder**: Copy the `Apeiron_Bridge_Source` folder from your flash drive to the destination computer (e.g., to the Desktop).
+2. **Open Terminal**: Right-click inside that folder and select **"Open in Terminal"**.
+
+### 1. Install System Requirements
+
+**IMPORTANT:** These commands use `sudo` because they install system-level Python and UI dependency packages. You will be prompted for your password.
 
 ```bash
-# Clone the repository
-git clone https://github.com/anandrobert-dev/apeiron_bridge.git
-cd apeiron_bridge
-
-# Install necessary system packages for Python compilation
 sudo apt update
-sudo apt install python3-venv python3-dev build-essential libxcb-cursor0
+sudo apt install -y python3-pip python3-venv python3-dev build-essential libxcb-cursor0
 ```
 
-> *Note: `libxcb-cursor0` is a common Qt6 dependency missing on some fresh Ubuntu installs.*
+**What this installs:**
+- `python3-pip`, `python3-venv`: Python package management and virtual environments
+- `build-essential`, `python3-dev`: Compiler tools for building Python packages
+- `libxcb-cursor0`: Qt6/PySide6 dependency for the GUI that is often missing on fresh Ubuntu 22.04 installs.
 
-## Step 2: Set up the Python Virtual Environment
+### 2. Setup Python Environment
 
-Create a clean virtual environment and install all dependencies from `requirements.txt`. PyInstaller requires all modules to be installed in the active environment to bundle them correctly.
+**NOTE:** These commands use `pip` (within a virtual environment), NOT `sudo`. Never use `sudo pip` as it can break your system's Python installation.
 
 ```bash
-# Create and activate the virtual environment
+# Create a fresh virtual environment
 python3 -m venv venv
+
+# Activate it
 source venv/bin/activate
 
-# Install the required Python packages
+# Install dependencies (pip, NOT sudo)
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install pyinstaller
 ```
 
-## Step 3: Build the Standalone Package with PyInstaller
+---
 
-We will use `pyinstaller` to bundle the app. We need to tell it to run in "windowed" mode (no terminal console) and to include our static assets (the `resources` folder).
+## 🏗️ Step 3: Build the App
+
+Run the following command to bundle your PySide6 application. This creates a standalone folder with your binary and required assets.
 
 ```bash
-# Run PyInstaller
-pyinstaller --name Apeiron_Bridge \
-            --windowed \
-            --icon=resources/icon.png \
-            --add-data "resources:resources" \
-            main.py
+pyinstaller --noconfirm --onedir --windowed --name "Apeiron_Bridge" \
+  --add-data "resources:resources" \
+  --hidden-import "PySide6" \
+  --hidden-import "pandas" \
+  --hidden-import "openpyxl" \
+  --hidden-import "rapidfuzz" \
+  --icon "resources/icon.png" \
+  main.py
 ```
 
-### Explanation of flags:
-* `--name Apeiron_Bridge`: Names the final executable file.
-* `--windowed`: Prevents a black terminal window from staying open behind the GUI application.
-* `--icon`: Applies the application icon (if supported by your desktop environment).
-* `--add-data "resources:resources"`: Copies the `resources/` folder into the compiled bundle so styles, images, and HTML guides load correctly. Look out for the `:` separator which is standard on Linux.
+*Note: we are using `--onedir` instead of `--onefile` for PySide6 apps specifically to avoid painfully slow startup times caused by PyInstaller unzipping Qt libraries on every run.*
 
-## Step 4: Locate & Run Your Bundle
+---
 
-Once the process finishes, PyInstaller will generate two new folders: `build/` and `dist/`.
+## 🚀 Step 4: Verify & Deploy
 
-1. **Locate the App**: Navigate to the `dist/Apeiron_Bridge/` directory.
+1. **Check the Output**: You will now see a new `dist/Apeiron_Bridge` folder.
+2. **Test It**: Run `./dist/Apeiron_Bridge/Apeiron_Bridge` to make sure it opens.
+3. **Prepare for Fleet**:
+   
+   Copy these files to a folder for distribution:
+   * `dist/Apeiron_Bridge/` - The entire bundled directory
+   * `resources/icon.png` - The application icon
+   * `install.sh` - Installation script
+   * `uninstall.sh` - Uninstallation script
+
+4. **Deploy to Target Machines**:
+   
+   On each target machine, copy the distribution folder, open a terminal inside it, and run:
    ```bash
-   cd dist/Apeiron_Bridge
-   ```
-2. **Run it**: You can double-click the `Apeiron_Bridge` executable file from your file manager, or run it via terminal:
-   ```bash
-   ./Apeiron_Bridge
+   chmod +x install.sh uninstall.sh
+   ./install.sh
    ```
 
-### Distributing the App
-To share the standalone app with other Ubuntu 22.04 users, simply zip the entire `dist/Apeiron_Bridge` folder folder and send it to them. They can extract it and run the executable directly without needing to install Python or any dependencies!
+---
+
+## 📝 Troubleshooting
+
+### App doesn't start or `libxcb-cursor` error
+- PySide6 requires Qt6 cursor libraries: `sudo apt install libxcb-cursor0`
+
+### Missing modules (`ModuleNotFoundError: No module named '...'`)
+- Make sure you ran `pip install -r requirements.txt` before compiling with `pyinstaller`. PyInstaller only picks up modules installed in the currently active environment.
+- Try explicitly adding the module to your build command: `--hidden-import "<module_name>"`
+
+### `glibc` errors on other machines
+- Make sure you followed these instructions entirely on an **Ubuntu 22.04** machine. Code built on Ubuntu 24.04 cannot be run on Ubuntu 22.04 due to newer C-libraries.

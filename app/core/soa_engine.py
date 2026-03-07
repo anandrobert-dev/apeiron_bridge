@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import datetime
 import os
+import re
+import traceback
 
 class SOAEngine:
     """
@@ -25,8 +27,6 @@ class SOAEngine:
         
         self.log_messages = []
         self.errors = []
-        self.results_dir = os.path.join(os.getcwd(), "reconciliation_results")
-        os.makedirs(self.results_dir, exist_ok=True)
         
         # Performance: progress callback and cancellation support
         self._progress_callback = None  # Set by worker: fn(pct, msg)
@@ -37,9 +37,6 @@ class SOAEngine:
         if self._progress_callback:
             self._progress_callback(pct, msg)
 
-    def _is_cancelled(self):
-        """Check if operation should be cancelled."""
-        return self._cancel_check() if self._cancel_check else False
 
     def log(self, msg):
         print(f"[SOAEngine] {msg}")
@@ -81,15 +78,15 @@ class SOAEngine:
                 )
                 df_result['Age (Days)'] = (today - temp_dates).dt.days
 
-                def bucket(days):
-                    if pd.isna(days): return "Unknown"
-                    elif days <= 30: return "0-30"
-                    elif days <= 60: return "31-60"
-                    elif days <= 90: return "61-90"
-                    elif days <= 120: return "91-120"
-                    else: return "121+"
-
-                df_result['Age Bucket'] = df_result['Age (Days)'].apply(bucket)
+                # Vectorized age bucketing using pd.cut (much faster than row-wise apply)
+                age_days = df_result['Age (Days)']
+                df_result['Age Bucket'] = pd.cut(
+                    age_days,
+                    bins=[-float('inf'), 30, 60, 90, 120, float('inf')],
+                    labels=["0-30", "31-60", "61-90", "91-120", "121+"],
+                    right=True
+                ).astype(str)
+                df_result.loc[age_days.isna(), 'Age Bucket'] = "Unknown"
                 df_result.insert(0, 'Age Bucket', df_result.pop('Age Bucket'))
                 df_result.insert(1, 'Age (Days)', df_result.pop('Age (Days)'))
                 df_result[self.date_col] = original_date_col_values
@@ -110,15 +107,13 @@ class SOAEngine:
         
         # --- DEEP ANALYSIS: Data Collection ---
         all_ref_entries = [] # List of dicts: {key, amount, source}
-        all_ref_field_entries = []  # For Deep Analysis field comparison
-        comparable_fields = {}  # {field_name_lower: (soa_col, ref_col)}
 
         # --- 3. Matching Logic ---
         # We need to preserve track of match sources for the detailed view
         soa_match_values_cleaned = df_result[soa_clean_col].tolist()
         match_sources_dict = {k: [] for k in soa_match_values_cleaned}
 
-        for idx, config in enumerate(self.ref_configs):
+        for config in self.ref_configs:
             if not config: continue
             
             ref_df, ref_match_col, return_cols, ref_name = config
@@ -234,38 +229,30 @@ class SOAEngine:
                 if self.mode == "MULTI":
                     df_result[soa_clean_col] = df_result[soa_clean_col].fillna(df_result[ref_clean_col])
                 
-                # Update Match Sources tracking for existing keys
+                # Update Match Sources tracking — vectorized via unique matched keys
                 first_ret_col = f"{ref_name}_{extract_cols[0]}"
                 if first_ret_col in df_result.columns:
                     match_mask = df_result[first_ret_col].notna()
-                    matched_indices = df_result.index[match_mask]
-                    
-                    for i in matched_indices:
-                        key = df_result.at[i, soa_clean_col]
+                    matched_keys = df_result.loc[match_mask, soa_clean_col].unique()
+                    for key in matched_keys:
                         if key not in match_sources_dict:
                             match_sources_dict[key] = []
                         if ref_name not in match_sources_dict[key]:
                             match_sources_dict[key].append(ref_name)
                 
-                # Count duplicates
-                ref_value_counts = ref_subset[ref_clean_col].value_counts().to_dict()
-                ref_dup_counts = {}
-                # Only need counts for SOA keys
-                current_keys = df_result[soa_clean_col].unique()
-                for k in current_keys:
-                    ref_dup_counts[k] = ref_value_counts.get(k, 0)
-                duplicate_counts[ref_name] = ref_dup_counts
+                # Count duplicates — use .map directly on value_counts (vectorized)
+                ref_value_counts = ref_subset[ref_clean_col].value_counts()
+                duplicate_counts[ref_name] = ref_value_counts.to_dict()
 
-                # Add Match Count column
+                # Add Match Count column — vectorized map
                 match_count_col = f"{ref_name}_Match_Count"
-                df_result[match_count_col] = df_result[soa_clean_col].map(lambda v: ref_dup_counts.get(v, 0))
+                df_result[match_count_col] = df_result[soa_clean_col].map(ref_value_counts).fillna(0).astype(int)
                 
                 # Drop temp col
                 if ref_clean_col in df_result.columns and ref_clean_col != soa_clean_col:
                     df_result.drop(columns=[ref_clean_col], inplace=True)
                     
             except Exception as e:
-                import traceback
                 error_msg = f"{ref_name}: {str(e)}\n{traceback.format_exc()}"
                 self.log(f"Error matching {ref_name}: {e}")
                 self.errors.append(error_msg)
@@ -277,18 +264,25 @@ class SOAEngine:
             for val in df_result[soa_clean_col].values
         ]
         
-        # Duplicate Summary Column
+        # Duplicate Summary Column — vectorized per-ref string construction
         if ref_names_ordered:
-            dup_summary_data = []
-            for soa_val in df_result[soa_clean_col].values:
-                parts = []
-                for rname in ref_names_ordered:
-                    count = duplicate_counts.get(rname, {}).get(soa_val, 0)
-                    if count == 0: parts.append(f"{rname}: no entry")
-                    elif count == 1: parts.append(f"{rname}: 1x")
-                    else: parts.append(f"{rname}: {count}x")
-                dup_summary_data.append(", ".join(parts))
-            df_result["Duplicate Summary"] = dup_summary_data
+            soa_vals = df_result[soa_clean_col]
+            dup_parts = []
+            for rname in ref_names_ordered:
+                counts_dict = duplicate_counts.get(rname, {})
+                counts_series = soa_vals.map(counts_dict).fillna(0).astype(int)
+                # Vectorized string formatting using np.select
+                dup_parts.append(np.where(
+                    counts_series == 0, f"{rname}: no entry",
+                    np.where(counts_series == 1, f"{rname}: 1x",
+                             rname + ": " + counts_series.astype(str) + "x")
+                ))
+            # Join parts per row
+            result_arrays = np.array(dup_parts)  # shape: (num_refs, num_rows)
+            df_result["Duplicate Summary"] = pd.Series(
+                [", ".join(result_arrays[:, i]) for i in range(result_arrays.shape[1])],
+                index=df_result.index
+            )
             
         # Cleanup
         # Backfill removed (Left Join)
@@ -316,8 +310,9 @@ class SOAEngine:
         
         if self.amount_col and self.amount_col in self.soa_df.columns:
             # A. Aggregate SOA amounts per key
-            soa_agg_df = self.soa_df.copy()
+            # A. Aggregate SOA amounts per key (lightweight: only extract needed columns)
             soa_clean_key_temp = f"_clean_key_{self.soa_match}"
+            soa_agg_df = self.soa_df[[self.soa_match, self.amount_col]].copy()
             soa_agg_df[soa_clean_key_temp] = soa_agg_df[self.soa_match].astype(str).apply(clean_match_value)
             
             def clean_amt(x):
@@ -379,128 +374,137 @@ class SOAEngine:
             df_discrepancy['Ref_Sources'] = df_discrepancy.get('Ref_Sources', pd.Series(['-'] * len(df_discrepancy))).fillna('-')
             df_discrepancy['Ref_Count'] = df_discrepancy.get('Ref_Count', pd.Series([0] * len(df_discrepancy))).fillna(0).astype(int)
             
-            # D. Calculate Delta and Status (per-ref comparison)
-            def classify_per_ref(row):
-                soa_amt = row[base_label] if pd.notna(row[base_label]) else 0.0
-                
-                # Collect all present ref amounts
-                ref_amounts = {}
-                for col in ref_amount_cols:
-                    if col in row.index and pd.notna(row[col]):
-                        ref_amounts[col] = row[col]
-                
-                # No refs at all
-                if not ref_amounts:
-                    if abs(soa_amt) < 0.01:
-                        return 0.0, "NO DATA"
-                    else:
-                        return soa_amt, "MISSING IN REF"
-                
-                # SOA is zero/missing but refs have data
-                if abs(soa_amt) < 0.01 and any(abs(v) >= 0.01 for v in ref_amounts.values()):
-                    max_ref = max(abs(v) for v in ref_amounts.values())
-                    return -max_ref, "MISSING IN SOA"
-                
-                # Compare each ref against SOA
-                deltas = {col: round(soa_amt - amt, 2) for col, amt in ref_amounts.items()}
-                max_abs_delta = max(abs(d) for d in deltas.values())
-                
-                # All refs match SOA
-                if max_abs_delta < 0.01:
-                    if len(ref_amounts) < len(ref_amount_cols):
-                        return 0.0, "PARTIAL (Some Refs Missing)"
-                    return 0.0, "MATCH"
-                
-                # Some refs disagree
-                # Use the largest absolute deviation as the reported delta
-                worst_delta = max(deltas.values(), key=abs)
-                
-                if len(ref_amounts) < len(ref_amount_cols):
-                    # Some refs missing, some present disagree
-                    return worst_delta, "MISMATCH (Partial)"
-                
-                if worst_delta > 0:
-                    return worst_delta, "Underpaid (Short)"
-                else:
-                    return worst_delta, "Overpaid (Excess)"
+            # D. Calculate Delta and Status (per-ref comparison) — VECTORIZED
+            soa_amt = df_discrepancy[base_label].fillna(0.0)
             
-            # Apply classification
-            results = df_discrepancy.apply(classify_per_ref, axis=1)
-            df_discrepancy['Delta'] = [r[0] for r in results]
-            df_discrepancy['Status'] = [r[1] for r in results]
+            # Collect ref amounts into a matrix
+            present_ref_cols = [c for c in ref_amount_cols if c in df_discrepancy.columns]
+            num_total_refs = len(ref_amount_cols)
             
-            # --- FIELD-LEVEL COMPARISON ---
+            if present_ref_cols:
+                ref_matrix = df_discrepancy[present_ref_cols].copy()
+                ref_notna = ref_matrix.notna()
+                num_present = ref_notna.sum(axis=1)
+                
+                # Compute deltas (SOA - each ref)
+                delta_matrix = ref_matrix.apply(lambda col: soa_amt - col)
+                abs_delta_matrix = delta_matrix.abs()
+                
+                # Max absolute delta across all refs (ignoring NaN)
+                max_abs_delta = abs_delta_matrix.max(axis=1).fillna(0.0)
+                
+                # Worst delta (largest absolute deviation)
+                worst_delta_idx = abs_delta_matrix.idxmax(axis=1)
+                worst_delta = pd.Series(
+                    [delta_matrix.at[i, col] if pd.notna(col) else 0.0 
+                     for i, col in zip(df_discrepancy.index, worst_delta_idx)],
+                    index=df_discrepancy.index
+                ).round(2)
+                
+                # Max ref absolute amount (for MISSING IN SOA case)
+                max_ref_abs = ref_matrix.abs().max(axis=1).fillna(0.0)
+                any_ref_nonzero = (ref_matrix.abs() >= 0.01).any(axis=1)
+                
+                # Build conditions (priority order, first match wins)
+                soa_zero = soa_amt.abs() < 0.01
+                no_refs = num_present == 0
+                all_refs = num_present >= num_total_refs
+                
+                conditions = [
+                    no_refs & soa_zero,                             # NO DATA
+                    no_refs & ~soa_zero,                            # MISSING IN REF
+                    soa_zero & any_ref_nonzero,                     # MISSING IN SOA
+                    (max_abs_delta < 0.01) & ~all_refs,             # PARTIAL (Some Refs Missing)
+                    (max_abs_delta < 0.01) & all_refs,              # MATCH
+                    ~all_refs,                                       # MISMATCH (Partial)
+                    worst_delta > 0,                                 # Underpaid (Short)
+                ]
+                status_choices = [
+                    "NO DATA", "MISSING IN REF", "MISSING IN SOA",
+                    "PARTIAL (Some Refs Missing)", "MATCH",
+                    "MISMATCH (Partial)", "Underpaid (Short)"
+                ]
+                delta_choices = [
+                    0.0, soa_amt, -max_ref_abs,
+                    0.0, 0.0,
+                    worst_delta, worst_delta
+                ]
+                
+                df_discrepancy['Status'] = np.select(conditions, status_choices, default="Overpaid (Excess)")
+                df_discrepancy['Delta'] = np.select(conditions, delta_choices, default=worst_delta).astype(float).round(2)
+            else:
+                # No ref amount columns at all
+                df_discrepancy['Delta'] = np.where(soa_amt.abs() < 0.01, 0.0, soa_amt)
+                df_discrepancy['Status'] = np.where(soa_amt.abs() < 0.01, "NO DATA", "MISSING IN REF")
+            
+            # --- FIELD-LEVEL COMPARISON (Optimized) ---
             if self.mode == "SOA":
-                def compare_fields(row):
+                # Pre-compute column pairs ONCE (not per-row)
+                soa_cols_lower = {str(c).lower().strip(): c for c in self.soa_df.columns}
+                field_pairs = []  # List of (soa_col, ref_col_in_result)
+                for config in self.ref_configs:
+                    if not config: continue
+                    _, ref_match_col, return_cols, ref_name = config
+                    for ref_col in return_cols:
+                        ref_col_lower = str(ref_col).lower().strip()
+                        if ref_col_lower in soa_cols_lower and ref_col_lower != str(ref_match_col).lower().strip():
+                            soa_target_col = soa_cols_lower[ref_col_lower]
+                            ref_target_col = f"{ref_name}_{ref_col}"
+                            if soa_target_col in df_discrepancy.columns and ref_target_col in df_discrepancy.columns:
+                                field_pairs.append((soa_target_col, ref_target_col))
+                
+                # Pre-compile regex patterns
+                _re_ymd = re.compile(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$')
+                _re_dmy = re.compile(r'^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$')
+                
+                def _try_parse_date(s):
+                    s = s.strip()
+                    m = _re_ymd.match(s)
+                    if m:
+                        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                    m = _re_dmy.match(s)
+                    if m:
+                        return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+                    return s.lower()
+                
+                def compare_fields_optimized(row):
                     mismatches = []
                     partial_matches = []
                     
-                    # Check Delta first
                     if abs(row.get('Delta', 0)) >= 0.01:
                         mismatches.append('Amount')
-
-                    # Map lowercase SOA column names to their exact casing
-                    soa_cols_lower = {str(c).lower().strip(): c for c in self.soa_df.columns}
                     
-                    for config in self.ref_configs:
-                        if not config: continue
-                        _, ref_match_col, return_cols, ref_name = config
+                    for soa_target_col, ref_target_col in field_pairs:
+                        soa_val = str(row[soa_target_col]).strip() if pd.notna(row[soa_target_col]) else ""
+                        ref_val = str(row[ref_target_col]).strip() if pd.notna(row[ref_target_col]) else ""
                         
-                        for ref_col in return_cols:
-                            # Does this ref col have a matching SOA col?
-                            ref_col_lower = str(ref_col).lower().strip()
-                            if ref_col_lower in soa_cols_lower and ref_col_lower != str(ref_match_col).lower().strip():
-                                soa_target_col = soa_cols_lower[ref_col_lower]
-                                ref_target_col = f"{ref_name}_{ref_col}"
-                                
-                                if soa_target_col in row.index and ref_target_col in row.index:
-                                    soa_val = str(row[soa_target_col]).strip() if pd.notna(row[soa_target_col]) else ""
-                                    ref_val = str(row[ref_target_col]).strip() if pd.notna(row[ref_target_col]) else ""
-                                    
-                                    # Clean up common empty string representations
-                                    soa_val = soa_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
-                                    ref_val = ref_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
-
-                                    # BUG 2 FIX: Normalize date strings before comparing
-                                    # Handles formats: 2025-12-17, 17/12/2025, 12/17/2025, 2025/12/17 etc.
-                                    def _try_parse_date(s):
-                                        import re
-                                        s = s.strip()
-                                        # Try YYYY-MM-DD or YYYY/MM/DD
-                                        m = re.match(r'^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$', s)
-                                        if m:
-                                            return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
-                                        # Try DD/MM/YYYY or DD-MM-YYYY (day first is common in non-US)
-                                        m = re.match(r'^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$', s)
-                                        if m:
-                                            return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
-                                        return s.lower()
-                                    
-                                    soa_val = _try_parse_date(soa_val)
-                                    ref_val = _try_parse_date(ref_val)
-                                    
-                                    if soa_val and ref_val and soa_val != ref_val:
-                                        # Check for partial match logic (e.g. CARDINAL vs CARDINAL LOGISTICS)
-                                        if ref_val in soa_val or soa_val in ref_val:
-                                            if soa_target_col not in partial_matches:
-                                                partial_matches.append(soa_target_col)
-                                        else:
-                                            if soa_target_col not in mismatches:
-                                                mismatches.append(soa_target_col)
-                                            
+                        soa_val = soa_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
+                        ref_val = ref_val.replace(' 00:00:00', '').replace('nan', '').replace('nat', '')
+                        
+                        soa_val = _try_parse_date(soa_val)
+                        ref_val = _try_parse_date(ref_val)
+                        
+                        if soa_val and ref_val and soa_val != ref_val:
+                            if ref_val in soa_val or soa_val in ref_val:
+                                if soa_target_col not in partial_matches:
+                                    partial_matches.append(soa_target_col)
+                            else:
+                                if soa_target_col not in mismatches:
+                                    mismatches.append(soa_target_col)
+                    
                     result_parts = []
                     if mismatches:
                         result_parts.append("Mismatch: " + ", ".join(mismatches))
                     if partial_matches:
                         result_parts.append("Partial: " + ", ".join(partial_matches))
-                    
                     return " | ".join(result_parts) if result_parts else "✓ All Match"
                 
-                df_discrepancy['Mismatched Fields'] = df_discrepancy.apply(compare_fields, axis=1)
+                df_discrepancy['Mismatched Fields'] = df_discrepancy.apply(compare_fields_optimized, axis=1)
             
-            # Sort: problems first, then matches
-            df_discrepancy['__sort__'] = df_discrepancy.apply(
-                lambda r: 0 if r.get('Mismatched Fields', '') != '✓ All Match' else (0 if r['Status'] != 'MATCH' else 1), axis=1
+            # Sort: problems first, then matches — vectorized
+            has_mismatch_field = df_discrepancy.get('Mismatched Fields', pd.Series([''] * len(df_discrepancy)))
+            df_discrepancy['__sort__'] = np.where(
+                (has_mismatch_field != '✓ All Match') | (df_discrepancy['Status'] != 'MATCH'), 0, 1
             )
             df_discrepancy.sort_values(by=['__sort__', 'Status', 'Delta'], inplace=True)
             df_discrepancy.drop(columns=['__sort__'], inplace=True)
@@ -568,46 +572,51 @@ class SOAEngine:
                             # Still add an empty series to values_per_ref to keep indices aligned
                             values_per_ref[ref_name] = pd.Series([""] * len(df_result))
 
-                    # 2. Compare Values (Row-wise)
-                    # We need to construct a comparison status column
+                    # 2. Compare Values — Pre-compile helpers outside loop
                     if values_per_ref:
-                        status_list = []
                         temp_df = pd.DataFrame(values_per_ref)
+                        num_refs = len(values_per_ref)
                         
-                        for i, row in temp_df.iterrows():
-                            # Filter empty/None values
-                            present_vals = {k: v for k, v in row.items() if v not in [None, "", np.nan]}
+                        # Pre-compile regex patterns
+                        _schema_ymd = re.compile(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$")
+                        _schema_dmy = re.compile(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$")
+                        
+                        def _normalize_schema_val(v):
+                            if isinstance(v, (int, float)):
+                                return round(float(v), 2)
+                            s = str(v).strip().replace(" 00:00:00", "")
+                            m = _schema_ymd.match(s)
+                            if m:
+                                return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+                            m = _schema_dmy.match(s)
+                            if m:
+                                return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+                            return s.upper()
+                        
+                        # Vectorized: identify non-empty cells
+                        non_empty_mask = temp_df.notna() & (temp_df != "") & (temp_df.astype(str) != "nan")
+                        non_empty_counts = non_empty_mask.sum(axis=1)
+                        
+                        status_list = []
+                        for i in range(len(temp_df)):
+                            count = non_empty_counts.iloc[i]
                             
-                            if not present_vals:
+                            if count == 0:
                                 status_list.append("NO DATA")
                                 continue
                             
-                            # Refined Status Logic (Phase 13)
-                            # 1. Missing Data Check
-                            if len(present_vals) < len(values_per_ref):
+                            if count < num_refs:
                                 status_list.append("MISSING DATA")
                                 continue
                             
-                            # 2. All Data Present: Exact Match Check
-                            # BUG 2 FIX: Normalize date formats before comparing
-                            import re as _re
-                            def _normalize_schema_val(v):
-                                if isinstance(v, (int, float)):
-                                    return round(float(v), 2)
-                                s = str(v).strip().replace(" 00:00:00", "")
-                                m = _re.match(r"^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$", s)
-                                if m:
-                                    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
-                                m = _re.match(r"^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$", s)
-                                if m:
-                                    return f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
-                                return s.upper()
+                            # All data present — compare normalized values
+                            row = temp_df.iloc[i]
+                            present_vals = {k: v for k, v in row.items() if non_empty_mask.iloc[i][k]}
                             norm_set = set(_normalize_schema_val(v) for v in present_vals.values())
                             
                             if len(norm_set) == 1:
                                 status_list.append("MATCH")
                             else:
-                                # Values disagree. Check for Partial Match (Substring logic, Text only)
                                 is_partial = False
                                 if field_type == "Text" and len(present_vals) >= 2:
                                     strs = [str(v).strip().upper() for v in present_vals.values() if v]
@@ -617,10 +626,7 @@ class SOAEngine:
                                         if all(s in longest for s in strs[1:]):
                                             is_partial = True
                                 
-                                if is_partial:
-                                    status_list.append("PARTIAL MATCH")
-                                else:
-                                    status_list.append("MISMATCH")
+                                status_list.append("PARTIAL MATCH" if is_partial else "MISMATCH")
                         
                         schema_data[f"{field_name} Status"] = status_list
 
@@ -628,7 +634,6 @@ class SOAEngine:
                 
             except Exception as e:
                 self.log(f"Schema Comparison Error: {e}")
-                import traceback
                 traceback.print_exc()
 
         # --- 9. Excel Generation ---

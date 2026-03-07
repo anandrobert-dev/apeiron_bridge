@@ -320,11 +320,8 @@ class MultiFileSelectScreen(QWidget):
             from app.core.data_loader import DataLoader
             from app.ui.column_config import ColumnConfigDialog
             
-            # Load headers only (efficiently?)
-            # DataLoader loads full df, might be slow for huge files but necessary
-            # TODO: Add optimization later if needed
-            df = DataLoader.load_file(path)
-            all_columns = df.columns.tolist()
+            # Load headers only (efficiently using cached header loader)
+            all_columns = DataLoader.load_file_headers(path)
             
             initial_selection = self.file_column_config.get(path, [])
             
