@@ -3,7 +3,8 @@ from app.ui.soa.file_select import SOAFileSelectScreen
 from app.ui.soa.advanced_mapping import SOAAdvancedMappingScreen
 from app.ui.multi.file_select import MultiFileSelectScreen
 from app.ui.multi.mapping import MultiMappingScreen
-from app.ui.quick_match.csv_match import QuickMatchScreen
+from app.rate_analysis_comparison.ui.rac_window import RateAnalysisComparisonWindow
+
 from .results import ResultsScreen
 from ..core.soa_engine import SOAEngine
 from ..core.worker import ReconciliationWorker
@@ -108,9 +109,9 @@ class MainWindow(QMainWindow):
         self.multi_mapping = MultiMappingScreen(self)
         self.stack.addWidget(self.multi_mapping)
 
-        # 3. Quick Match
-        self.quick_match_screen = QuickMatchScreen(self)
-        self.stack.addWidget(self.quick_match_screen)
+        # 3. Rate Analysis & Comparison Screen
+        self.rac_screen = RateAnalysisComparisonWindow(self)
+        self.stack.addWidget(self.rac_screen)
         
         # 4. Results Screen
         self.results_screen = ResultsScreen(self)
@@ -123,7 +124,7 @@ class MainWindow(QMainWindow):
         # Welcome -> Modes
         self.welcome_screen.btn_soa.clicked.connect(self.start_soa)
         self.welcome_screen.btn_multi.clicked.connect(self.start_multi)
-        self.welcome_screen.btn_csv.clicked.connect(self.start_quick_match)
+        self.welcome_screen.btn_rac.clicked.connect(self.start_rac)
         
         # SOA Flow
         self.soa_file_select.go_back.connect(lambda: self.navigate_to_widget(self.welcome_screen))
@@ -140,8 +141,8 @@ class MainWindow(QMainWindow):
         self.multi_mapping.go_back.connect(lambda: self.navigate_to_widget(self.multi_file_select))
         self.multi_mapping.run_reco.connect(self.run_reconciliation)
         
-        # Quick Match Flow
-        self.quick_match_screen.go_back.connect(lambda: self.navigate_to_widget(self.welcome_screen))
+        # RA&C Flow
+        self.rac_screen.go_back.connect(lambda: self.navigate_to_widget(self.welcome_screen))
         
         # Results Flow
         self.results_screen.go_home.connect(lambda: self.navigate_to_widget(self.welcome_screen))
@@ -163,10 +164,10 @@ class MainWindow(QMainWindow):
         self.reco_mode = "MULTI"
         self.navigate_to_widget(self.multi_file_select)
 
-    def start_quick_match(self):
-        """Starts Quick CSV Match Workflow."""
-        self.reco_mode = "QUICK"
-        self.navigate_to_widget(self.quick_match_screen)
+    def start_rac(self):
+        """Starts Rate Analysis & Comparison (RA&C) Workflow."""
+        self.reco_mode = "RAC"
+        self.navigate_to_widget(self.rac_screen)
 
     def go_back_from_results(self):
         if hasattr(self, 'reco_mode') and self.reco_mode == "MULTI":

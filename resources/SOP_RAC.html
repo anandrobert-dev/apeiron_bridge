@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <style>
+        body {
+            background-color: #1E1E1E;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            font-size: 14px;
+        }
+
+        h1 {
+            color: #F59E0B;
+            /* Amber/Orange */
+            text-align: center;
+            border-bottom: 2px solid #F59E0B;
+            padding-bottom: 10px;
+            font-size: 24px;
+        }
+
+        h2 {
+            color: #00E5FF;
+            /* Cyan */
+            font-size: 18px;
+            margin-top: 25px;
+            border-bottom: 1px dashed #00E5FF;
+            padding-bottom: 5px;
+        }
+
+        h3 {
+            color: #D500F9;
+            /* Purple */
+            font-size: 16px;
+            margin-top: 20px;
+        }
+
+        .highlight {
+            color: #F59E0B;
+            /* Amber */
+            font-weight: bold;
+        }
+
+        .step {
+            margin-bottom: 15px;
+            padding-left: 15px;
+            border-left: 3px solid #444;
+        }
+
+        .step strong {
+            color: #FFFFFF;
+        }
+
+        ul {
+            list-style-type: none;
+            padding-left: 10px;
+        }
+
+        li::before {
+            content: "•";
+            color: #00E5FF;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+        }
+
+        .tip {
+            background-color: #2D2D30;
+            border-left: 4px solid #10B981;
+            /* Emerald green */
+            padding: 10px;
+            margin-top: 5px;
+            font-style: italic;
+            color: #A0A0A0;
+            font-size: 13px;
+        }
+
+        .warning {
+            background-color: #2D2D30;
+            border-left: 4px solid #EF4444;
+            /* Red */
+            padding: 10px;
+            margin-top: 5px;
+            color: #F87171;
+            font-size: 13px;
+        }
+
+        .panel-blue {
+            color: #64B5F6;
+            font-weight: bold;
+        }
+
+        .panel-green {
+            color: #81C784;
+            font-weight: bold;
+        }
+
+        .panel-pink {
+            color: #F06292;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+<!-- ENGLISH_START -->
+
+    <h1>Standard Operating Procedure (SOP)</h1>
+    <p style="text-align: center; color: #888;">Rate Analysis & Comparison (RA&C) Module</p>
+
+    <p><strong>Apeiron Bridge</strong> includes a high-performance, strictly offline Rate Analysis & Comparison module. Follow this step-by-step guide to compare agreements and audit historical shipping rates.</p>
+
+    <h2>Phase 1: Launch & Mode Selection</h2>
+
+    <div class="step">
+        1. <strong>Launch the Module</strong><br>
+        On the Welcome Screen, locate the <strong>"Rate Analysis & Comparison"</strong> card and click the amber <span class="highlight">Launch</span> button.
+    </div>
+
+    <div class="step">
+        2. <strong>Select Operation Mode</strong><br>
+        Choose one of three modes:
+        <ul>
+            <li><strong>Rate Comparison:</strong> Agreement-vs-agreement rate sheets comparison.</li>
+            <li><strong>Terms & Conditions Comparison:</strong> Agreement-vs-agreement contractual clause extraction & audit.</li>
+            <li><strong>Rate Analysis:</strong> Shipment history-vs-agreements fully-loaded cost audit.</li>
+        </ul>
+    </div>
+
+    <h2>Phase 2: Agreement Upload & Parsing (Rate & T&C)</h2>
+
+    <div class="step">
+        1. <strong>Add Agreements</strong><br>
+        Click **Add Agreements** to upload 2 or more files. Tag each file with carrier name, date ranges, and version flags (`New`, `Old / superseded`, or `N/A`). Same-carrier names with Old/New version flags will enable rate and clause change tracking.
+    </div>
+
+    <div class="step">
+        2. <strong>Auto-Parsing & Matching</strong><br>
+        The deterministic parsing worker scrapes rate sheets and extracts terms and conditions into a structured taxonomy. If a rate table structure isn't recognized, a mapping screen will ask you to map Origin/Destination Zip, City, Slabs, and Base Rate.
+    </div>
+
+    <div class="step">
+        3. <strong>Clause Review & Acceptance</strong><br>
+        Review the clauses extracted per agreement. Click to accept, edit, or reject each clause. Only accepted clauses will be sent to the comparison engine.
+    </div>
+
+    <div class="step">
+        4. <strong>Configure Comparison Settings</strong><br>
+        <ul>
+            <li><strong>Nearby-Lane Matching:</strong> Toggle geographic radius lookup to substitute nearby covered lanes when an exact match is missing.</li>
+            <li><strong>Baseline Carrier:</strong> Select which carrier's rate functions as the comparison baseline.</li>
+            <li><strong>Clause Favorability:</strong> Edit the rubric used to grade carrier terms.</li>
+        </ul>
+    </div>
+
+    <h2>Phase 3: Shipment History Upload (Rate Analysis)</h2>
+
+    <div class="step">
+        1. <strong>Upload Shipment Data</strong><br>
+        Select your historical shipment file (CSV or Excel). Map required fields: Invoice #, BOL #, Shipment Date, Carrier, Billed Freight, Billed Fuel, Origin Zip, Destination Zip, Weight, Pallets, and Mode.
+    </div>
+
+    <div class="step">
+        2. <strong>Select Target Agreements</strong><br>
+        Select the carrier agreements (parsed in Phase 2) you want to compare against your history.
+    </div>
+
+    <div class="step">
+        3. <strong>Run Fully-Loaded Analysis</strong><br>
+        Click **Run Analysis**. The engine calculates what each carrier would have billed including line-haul, fuel surcharges, accessorials, and minimums.
+    </div>
+
+    <h2>Phase 4: Understanding Results</h2>
+
+    <h3 class="panel-blue">1. Rate Comparison Reports</h3>
+    <ul>
+        <li><strong>Detailed Rates:</strong> Grid comparing lanes directly across carriers. Green highlights the cheapest carrier rate, Red highlights the most expensive, and Grey flags missing coverage.</li>
+        <li><strong>Weight Slab Summary:</strong> Side-by-side view of rates across weight brackets (LTL/FTL).</li>
+    </ul>
+
+    <h3 class="panel-green">2. T&C Comparison Reports</h3>
+    <ul>
+        <li><strong>Clause Coverage Matrix:</strong> Grid showing which carriers have clauses in each category (silent categories are highlighted).</li>
+        <li><strong>Clause Delta & Favorability:</strong> Compares clause text and grades them based on the shipper's Postgres-stored rubric.</li>
+        <li><strong>Change Tracking:</strong> Visual red/green text diffs between Old and New versions of the same carrier's contract.</li>
+    </ul>
+
+    <h3 class="panel-pink">3. Rate Analysis Dashboard</h3>
+    <ul>
+        <li><strong>Shipment Audit:</strong> Shows what was billed vs. what other carriers would charge.</li>
+        <li><strong>Cheapest Option:</strong> Highlights the lowest-cost carrier for each shipment on a fully-loaded basis.</li>
+        <li><strong>Potential Savings:</strong> Displays aggregate savings if shipments had been routed optimally.</li>
+    </ul>
+
+    <h2>Phase 5: Exporting Reports</h2>
+    <div class="step">
+        Click **Export to Excel** or **Export to PDF** to download formatted workbooks containing all rate comparison grids, T&C matrices, and shipment audits.
+    </div>
+
+    <h2>Security & Privacy Configuration</h2>
+    <p class="warning">Warning: Do not upload raw shipment identifiers or contract text to public AI models. All computations run locally on your system. Optional AI features (clause-similarity ranking and summaries) degrade gracefully and process only de-identified, short text snippets if you provide your own private API key in Settings.</p>
+
+<!-- ENGLISH_END -->
+
+<!-- HINDI_START -->
+
+    <h1>मानक संचालन प्रक्रिया (SOP)</h1>
+    <p style="text-align: center; color: #888;">दर विश्लेषण और तुलना (RA&C) मॉड्यूल</p>
+
+    <p><strong>Apeiron Bridge</strong> में एक उच्च-प्रदर्शन, पूरी तरह से ऑफ़लाइन दर विश्लेषण और तुलना मॉड्यूल शामिल है। समझौतों की तुलना करने और ऐतिहासिक शिपिंग दरों का ऑडिट करने के लिए इस गाइड का पालन करें।</p>
+
+    <h2>चरण 1: शुरुआत और मोड चयन</h2>
+
+    <div class="step">
+        1. <strong>मॉड्यूल लॉन्च करें</strong><br>
+        वेलकम स्क्रीन पर, <strong>"Rate Analysis & Comparison"</strong> कार्ड खोजें और एम्बर (amber) <span class="highlight">Launch</span> बटन पर क्लिक करें।
+    </div>
+
+    <div class="step">
+        2. <strong>मोड चुनें</strong><br>
+        तीन मोड में से एक का चयन करें:
+        <ul>
+            <li><strong>दर तुलना (Rate Comparison):</strong> समझौतों के बीच संख्यात्मक दर तालिकाओं की तुलना।</li>
+            <li><strong>नियम और शर्तें तुलना (T&C Comparison):</strong> समझौतों के बीच संविदात्मक धाराओं (clauses) का निष्कर्षण और ऑडिट।</li>
+            <li><strong>दर विश्लेषण (Rate Analysis):</strong> समझौतों के विरुद्ध शिपमेंट इतिहास का पूर्ण लागत ऑडिट।</li>
+        </ul>
+    </div>
+
+    <h2>चरण 2: अनुबंध अपलोड और पार्सिंग (दर और नियम)</h2>
+
+    <div class="step">
+        1. <strong>अनुबंध जोड़ें (Add Agreements)</strong><br>
+        2 या अधिक फ़ाइलें अपलोड करने के लिए **Add Agreements** पर क्लिक करें। प्रत्येक फ़ाइल को वाहक (carrier) का नाम, तिथि सीमा और संस्करण फ़्लैग (`New`, `Old / superseded`, या `N/A`) के साथ टैग करें। पुराने/नए संस्करण फ़्लैग के साथ एक ही वाहक के नाम दर और क्लॉज परिवर्तन ट्रैकिंग को सक्षम करेंगे।
+    </div>
+
+    <div class="step">
+        2. <strong>ऑटो-पार्सिंग और मिलान</strong><br>
+        बैकग्राउंड वर्कर दर तालिकाओं को पार्स करता है और नियम व शर्तों को एक व्यवस्थित टैक्सोनॉमी में निकालता है। यदि दर तालिका की संरचना पहचानी नहीं जाती है, तो एक मैपिंग स्क्रीन दिखाई देगी जो आपको पिनकोड, शहर, वजन स्लैब और आधार दर को मैप करने के लिए कहेगी।
+    </div>
+
+    <div class="step">
+        3. <strong>धाराओं की समीक्षा और स्वीकृति</strong><br>
+        प्रत्येक समझौते से निकाली गई धाराओं की समीक्षा करें। प्रत्येक धारा को स्वीकार, संपादित या अस्वीकार करने के लिए क्लिक करें। केवल स्वीकृत धाराएं ही तुलना इंजन में भेजी जाएंगी।
+    </div>
+
+    <div class="step">
+        4. <strong>तुलना सेटिंग्स कॉन्फ़िगर करें</strong><br>
+        <ul>
+            <li><strong>पास के लेन मिलान (Nearby-Lane Matching):</strong> जब सटीक मिलान न हो, तो पास के कवर्ड लेन को खोजने के लिए भौगोलिक त्रिज्या लुकअप को सक्षम करें।</li>
+            <li><strong>बेसलाइन कैरियर:</strong> चुनें कि किस वाहक की दर तुलना बेसलाइन के रूप में कार्य करेगी।</li>
+            <li><strong>धारा अनुकूलता (Clause Favorability):</strong> वाहक शर्तों को ग्रेड करने के लिए उपयोग किए जाने वाले रुब्रिक को संपादित करें।</li>
+        </ul>
+    </div>
+
+    <h2>चरण 3: शिपमेंट इतिहास अपलोड (दर विश्लेषण)</h2>
+
+    <div class="step">
+        1. <strong>शिपमेंट डेटा अपलोड करें</strong><br>
+        अपनी ऐतिहासिक शिपमेंट फ़ाइल (CSV या Excel) का चयन करें। आवश्यक फ़ील्ड मैप करें: Invoice #, BOL #, Shipment Date, Carrier, Billed Freight, Billed Fuel, Origin Zip, Destination Zip, Weight, Pallets, and Mode।
+    </div>
+
+    <div class="step">
+        2. <strong>लक्षित अनुबंध चुनें</strong><br>
+        उन वाहक समझौतों का चयन करें जिन्हें आप अपने शिपमेंट इतिहास से तुलना करना चाहते हैं।
+    </div>
+
+    <div class="step">
+        3. <strong>लागत विश्लेषण चलाएं</strong><br>
+        **Run Analysis** पर क्लिक करें। इंजन गणना करता है कि प्रत्येक वाहक ने लाइन-हॉल, ईंधन अधिभार (fuel surcharges), सहायक शुल्क (accessorials), और न्यूनतम शुल्क को मिलाकर कितना बिल किया होता।
+    </div>
+
+    <h2>चरण 4: परिणाम समझना</h2>
+
+    <h3 class="panel-blue">1. दर तुलना रिपोर्ट</h3>
+    <ul>
+        <li><strong>विस्तृत दरें:</strong> सीधे वाहकों के बीच लेन की तुलना करने वाला ग्रिड। हरा रंग सबसे सस्ती दर को दर्शाता है, लाल रंग सबसे महंगी दर को, और ग्रे रंग कवर्ड न की गई लेन को दर्शाता है।</li>
+        <li><strong>वजन स्लैब सारांश:</strong> वजन श्रेणियों (LTL/FTL) के अनुसार दरों का विवरण।</li>
+    </ul>
+
+    <h3 class="panel-green">2. नियम और शर्तें तुलना रिपोर्ट</h3>
+    <ul>
+        <li><strong>धारा कवरेज मैट्रिक्स:</strong> यह दिखाने वाला ग्रिड कि किस वाहक के पास प्रत्येक श्रेणी में धाराएं हैं (मौन श्रेणियों को हाइलाइट किया जाता है)।</li>
+        <li><strong>धारा अंतर और अनुकूलता:</strong> धाराओं के पाठ की तुलना करता है और उन्हें पोस्टग्रेस में संग्रहीत नियमों के आधार पर ग्रेड करता है।</li>
+        <li><strong>बदलाव ट्रैकिंग:</strong> एक ही वाहक के अनुबंध के पुराने और नए संस्करणों के बीच दृश्य अंतर (diff)।</li>
+    </ul>
+
+    <h3 class="panel-pink">3. दर विश्लेषण डैशबोर्ड</h3>
+    <ul>
+        <li><strong>शिपमेंट ऑडिट:</strong> दिखाता है कि कितना बिल किया गया था बनाम अन्य वाहक कितना शुल्क लेते।</li>
+        <li><strong>सबसे सस्ता विकल्प:</strong> पूर्ण लागत के आधार पर प्रत्येक शिपमेंट के लिए सबसे कम लागत वाले वाहक को दर्शाता है।</li>
+        <li><strong>संभावित बचत:</strong> यदि शिपमेंट को सही वाहक से भेजा जाता, तो कुल बचत दिखाता है।</li>
+    </ul>
+
+    <h2>चरण 5: रिपोर्ट निर्यात करना</h2>
+    <div class="step">
+        दर तुलना ग्रिड, नियम मैट्रिक्स और शिपमेंट ऑडिट वाली एक्सेल या पीडीएफ डाउनलोड करने के लिए **Export to Excel** या **Export to PDF** पर क्लिक करें।
+    </div>
+
+    <h2>सुरक्षा और गोपनीयता कॉन्फ़िगरेशन</h2>
+    <p class="warning">चेतावनी: सार्वजनिक एआई मॉडल में शिपमेंट डेटा या अनुबंध के पाठ को अपलोड न करें। सभी गणनाएं आपके सिस्टम पर स्थानीय रूप से चलती हैं। वैकल्पिक एआई विशेषताएं (धारा-समानता रैंकिंग और सारांश) केवल तभी काम करेंगी यदि आप सेटिंग्स में अपनी निजी एपीआई कुंजी प्रदान करते हैं।</p>
+<!-- HINDI_END -->
+
+</body>
+
+</html>

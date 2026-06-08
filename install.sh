@@ -21,6 +21,37 @@ if [ ! -d "dist/$BUNDLE_DIR" ]; then
     exit 1
 fi
 
+# 1.5. Install and configure PostgreSQL database dependency
+echo "Checking and installing PostgreSQL database service..."
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+
+# Enable PostgreSQL to start automatically on boot and start it now
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
+
+# Verify it is running before proceeding
+if ! sudo systemctl is-active --quiet postgresql; then
+    echo "ERROR: PostgreSQL failed to start. Check: sudo journalctl -xe"
+    exit 1
+fi
+
+# Configure the dedicated database role and database
+echo "Configuring PostgreSQL user and database..."
+sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='apeiron'" | grep -q 1 || sudo -u postgres psql -c "CREATE ROLE apeiron WITH LOGIN SUPERUSER PASSWORD 'apeiron_local';"
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='apeiron_bridge'" | grep -q 1 || sudo -u postgres psql -c "CREATE DATABASE apeiron_bridge OWNER apeiron;"
+
+# Run the database setup script to apply migrations and seed the data
+echo "Running database migrations and seed setup..."
+if [ -f "venv/bin/python" ]; then
+    PYTHONPATH=. venv/bin/python app/rate_analysis_comparison/db/setup.py
+elif command -v python3 &>/dev/null; then
+    PYTHONPATH=. python3 app/rate_analysis_comparison/db/setup.py
+else
+    echo "⚠️ Warning: Python environment not found. Skipped database migrations."
+fi
+
+
 # 2. Check for the icon
 if [ ! -f "$ICON_SOURCE" ]; then
     echo "⚠️ Warning: Icon file '$ICON_SOURCE' not found. App will use a default icon."

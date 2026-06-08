@@ -121,3 +121,51 @@ pyinstaller --noconfirm --onedir --windowed --name "Apeiron_Bridge" \
 
 ### `glibc` errors on other machines
 - Make sure you followed these instructions entirely on an **Ubuntu 22.04** machine. Code built on Ubuntu 24.04 cannot be run on Ubuntu 22.04 due to newer C-libraries.
+
+---
+
+## 🐘 Step 5: PostgreSQL Service Management
+
+The Rate Analysis & Comparison (RA&C) module utilizes a local PostgreSQL database for carrier autocomplete suggestions and nearby-lane geolocation fallback matching.
+
+### Checking Service Status
+To check if the PostgreSQL service is currently running:
+```bash
+sudo systemctl status postgresql
+```
+
+### Manual Service Control
+- **Start the service:** `sudo systemctl start postgresql`
+- **Stop the service:** `sudo systemctl stop postgresql`
+- **Restart the service:** `sudo systemctl restart postgresql`
+
+### Enable Auto-Start on Boot
+To ensure PostgreSQL launches automatically every time the computer boots up:
+```bash
+sudo systemctl enable postgresql
+```
+
+### Database Initialization (First-Time Setup)
+Even after starting the PostgreSQL service, you must create the dedicated database user (`apeiron`), the database (`apeiron_bridge`), and run programmatic migrations for the first-time setup:
+
+1. **Create the PostgreSQL role/user:**
+   ```bash
+   sudo -u postgres psql -c "CREATE ROLE apeiron WITH LOGIN SUPERUSER PASSWORD 'apeiron_local';"
+   ```
+
+2. **Create the database:**
+   ```bash
+   sudo -u postgres psql -c "CREATE DATABASE apeiron_bridge OWNER apeiron;"
+   ```
+
+3. **Run the database migration and seeding script:**
+   ```bash
+   PYTHONPATH=. venv/bin/python app/rate_analysis_comparison/db/setup.py
+   ```
+
+### Connection Error Symptom
+If the PostgreSQL service is not running, the application will display a warning banner at the top of the RA&C screen and degrade gracefully (allowing full raw document parsing without autocomplete/nearby match geolocations). The terminal output will show a warning similar to:
+```
+DB unavailable for carrier autocomplete: (psycopg.OperationalError) connection failed: connection to server at "127.0.0.1", port 5432 failed: Connection refused
+```
+

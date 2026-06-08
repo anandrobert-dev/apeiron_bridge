@@ -1,0 +1,30 @@
+[
+  {
+    "clause_type": "payment_terms",
+    "criterion": "Payment terms in days (larger is better for shipper)",
+    "weight": 1.0,
+    "shipper_favorable_pattern": {"min_days": 30, "operator": ">="},
+    "carrier_favorable_pattern": {"min_days": 15, "operator": "<"}
+  },
+  {
+    "clause_type": "minimum_charge",
+    "criterion": "Minimum line-haul charge amount",
+    "weight": 1.0,
+    "shipper_favorable_pattern": {"max_amount": 150.0, "operator": "<="},
+    "carrier_favorable_pattern": {"min_amount": 250.0, "operator": ">"}
+  },
+  {
+    "clause_type": "detention_dry",
+    "criterion": "Free time before dry detention charges start",
+    "weight": 1.0,
+    "shipper_favorable_pattern": {"min_free_hours": 2.0, "operator": ">="},
+    "carrier_favorable_pattern": {"min_free_hours": 1.0, "operator": "<="}
+  },
+  {
+    "clause_type": "fuel_surcharge",
+    "criterion": "Fuel surcharge formula matching index",
+    "weight": 1.0,
+    "shipper_favorable_pattern": {"index": "DOE_WEEKLY"},
+    "carrier_favorable_pattern": {"index": "FLAT_PERCENT"}
+  }
+]

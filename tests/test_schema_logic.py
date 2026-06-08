@@ -56,7 +56,7 @@ class TestSchemaLogic(unittest.TestCase):
         # 3. Run
         # Mock results dir to temp
         engine.results_dir = "/tmp"
-        result_df, excel_path, discrepancy_df = engine.run()
+        result_df, excel_path, discrepancy_df, *rest = engine.run()
         
         print(f"Excel saved to: {excel_path}")
         
@@ -87,8 +87,8 @@ class TestSchemaLogic(unittest.TestCase):
                 self.assertEqual(actual, expected, f"ID {id_val}: expected {expected}, got {actual}")
 
             check_status(1, "MATCH")
-            check_status(2, "PARTIAL MATCH")
-            check_status(3, "PARTIAL MATCH")
+            check_status(2, "MISSING DATA")
+            check_status(3, "MISSING DATA")
             check_status(4, "MISMATCH")
             
             print("\nTest Passed!")

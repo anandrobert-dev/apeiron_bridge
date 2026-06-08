@@ -185,6 +185,8 @@ class WelcomeScreen(QWidget):
         lbl_title = QLabel("SOA Reconciliation")
         lbl_title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {c_blue}; border: none; background: transparent;")
         lbl_title.setAlignment(Qt.AlignCenter)
+        lbl_title.setWordWrap(True)
+        lbl_title.setMinimumWidth(240)
         
         lbl_desc = QLabel("Compare Statement of Account against Reference files.")
         lbl_desc.setObjectName("SubTitle") # Use QSS for color/font
@@ -241,14 +243,66 @@ class WelcomeScreen(QWidget):
         )
         actions_layout.addWidget(card_multi)
 
-        # Module 3: CSV Matcher (GREEN Theme)
-        card_csv, self.btn_csv = self.create_action_card(
-            "Quick CSV Match",
-            "Rapidly join two CSVs based on a common key.",
-            "SecondaryButton",
-            color=c_green
-        )
-        actions_layout.addWidget(card_csv)
+        # Module 3: Rate Analysis & Comparison (AMBER Theme)
+        c_amber = "#F59E0B"
+        card_rac = QFrame()
+        card_rac.setObjectName("Card")
+        card_rac.setFixedWidth(280)
+        card_rac.setFixedHeight(230)  # Match height of the customized SOA card
+        card_rac.setStyleSheet(f"QFrame#Card {{ border: 2px solid {c_amber}; }}")
+        
+        card_rac_layout = QVBoxLayout(card_rac)
+        
+        lbl_title_rac = QLabel("Rate Analysis & Comparison")
+        lbl_title_rac.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {c_amber}; border: none; background: transparent;")
+        lbl_title_rac.setAlignment(Qt.AlignCenter)
+        lbl_title_rac.setWordWrap(True)
+        lbl_title_rac.setMinimumWidth(240)
+        
+        lbl_desc_rac = QLabel("Compare carrier rate agreements and analyze shipment-level savings.")
+        lbl_desc_rac.setObjectName("SubTitle")
+        lbl_desc_rac.setWordWrap(True)
+        lbl_desc_rac.setAlignment(Qt.AlignCenter)
+        
+        self.btn_rac = QPushButton("Launch")
+        self.btn_rac.setObjectName("PrimaryButton")
+        self.btn_rac.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c_amber};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #D97706; }}
+        """)
+        
+        self.btn_sop_rac = QPushButton("SOP for RA&C") 
+        self.btn_sop_rac.setObjectName("SecondaryButton") 
+        self.btn_sop_rac.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: 2px solid #FBBF24;
+                color: #FBBF24;
+                border-radius: 4px;
+                padding: 5px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(251, 191, 36, 0.1);
+            }}
+        """)
+        self.btn_sop_rac.clicked.connect(self.show_sop_rac)
+        
+        card_rac_layout.addWidget(lbl_title_rac)
+        card_rac_layout.addWidget(lbl_desc_rac)
+        card_rac_layout.addStretch()
+        card_rac_layout.addWidget(self.btn_rac)
+        card_rac_layout.addWidget(self.btn_sop_rac)
+        
+        actions_layout.addWidget(card_rac)
+
 
         layout.addLayout(actions_layout)
         layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding))
@@ -278,6 +332,8 @@ class WelcomeScreen(QWidget):
         # Title Color matching theme
         lbl_title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {color}; border: none; background: transparent;")
         lbl_title.setAlignment(Qt.AlignCenter)
+        lbl_title.setWordWrap(True)
+        lbl_title.setMinimumWidth(240)
         
         lbl_desc = QLabel(desc_text)
         lbl_desc.setObjectName("SubTitle")
@@ -308,6 +364,8 @@ class WelcomeScreen(QWidget):
 
     # Persist the SOP window instance
     sop_window = None
+    sop_window_rac = None
+
 
     def show_sop(self):
         """Opens a detached, non-blocking window to display the SOP markdown file."""
@@ -433,4 +491,109 @@ class WelcomeScreen(QWidget):
         self.sop_window.show()
         self.sop_window.raise_()
         self.sop_window.activateWindow()
+
+    def show_sop_rac(self):
+        """Opens a detached, non-blocking window to display the SOP for Rate Analysis & Comparison."""
+        from PySide6.QtWidgets import QDialog, QTextEdit, QVBoxLayout, QPushButton, QHBoxLayout, QLabel, QWidget, QComboBox
+        import os
+        
+        if self.sop_window_rac is None:
+            self.sop_window_rac = QDialog(None) 
+            self.sop_window_rac.setWindowTitle("SOP for Rate Analysis & Comparison")
+            self.sop_window_rac.resize(900, 700)
+            
+            layout = QVBoxLayout(self.sop_window_rac)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            
+            # Header Bar
+            header = QWidget()
+            header.setStyleSheet("background-color: #2D2D30; border-bottom: 2px solid #F59E0B;")
+            header.setFixedHeight(40)
+            header_layout = QHBoxLayout(header)
+            header_layout.setContentsMargins(15, 0, 15, 0)
+            
+            lbl_title = QLabel("Rate Analysis & Comparison — Standard Operating Procedure")
+            lbl_title.setStyleSheet("color: #F59E0B; font-weight: bold; font-size: 14px;")
+            header_layout.addWidget(lbl_title)
+            
+            header_layout.addStretch()
+            
+            # Language Toggle Combo Box
+            cbo_lang = QComboBox()
+            cbo_lang.addItems(["English", "हिन्दी (Hindi)"])
+            cbo_lang.setStyleSheet("""
+                QComboBox {
+                    background-color: #1E1E1E; color: #FFF; 
+                    border: 1px solid #444; padding: 2px 10px; border-radius: 4px;
+                }
+            """)
+            header_layout.addWidget(cbo_lang)
+            
+            layout.addWidget(header)
+            
+            text_edit = QTextEdit()
+            text_edit.setReadOnly(True)
+            text_edit.setStyleSheet("background-color: #1E1E1E; border: none;")
+            
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            sop_path = os.path.join(base_dir, "resources", "SOP_RAC.html")
+            
+            def load_language(idx):
+                if os.path.exists(sop_path):
+                    with open(sop_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    
+                    head_part = content.split("</head>")[0] + "</head>" if "</head>" in content else ""
+                    
+                    if idx == 0:
+                        start_tag = "<!-- ENGLISH_START -->"
+                        end_tag = "<!-- ENGLISH_END -->"
+                    else:
+                        start_tag = "<!-- HINDI_START -->"
+                        end_tag = "<!-- HINDI_END -->"
+                        
+                    start_idx = content.find(start_tag)
+                    end_idx = content.find(end_tag)
+                    
+                    if start_idx != -1 and end_idx != -1:
+                        body_part = content[start_idx + len(start_tag):end_idx]
+                        text_edit.setHtml("<html>" + head_part + "<body>" + body_part + "</body></html>")
+                    else:
+                        text_edit.setHtml(content)
+                else:
+                    text_edit.setPlainText("SOP file not found.")
+
+            cbo_lang.currentIndexChanged.connect(load_language)
+            load_language(0) # Load English by default
+                
+            layout.addWidget(text_edit)
+            
+            # Close button footer
+            footer = QWidget()
+            footer.setStyleSheet("background-color: #2D2D30; border-top: 1px solid #444;")
+            footer_layout = QHBoxLayout(footer)
+            footer_layout.setContentsMargins(10, 10, 10, 10)
+            footer_layout.addStretch()
+            
+            btn_close = QPushButton("Close Manual")
+            btn_close.setMinimumWidth(120)
+            btn_close.setStyleSheet("""
+                QPushButton {
+                    background-color: #444; color: white; border: none; padding: 8px; border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #555; }
+            """)
+            btn_close.clicked.connect(self.sop_window_rac.close)
+            footer_layout.addWidget(btn_close)
+            
+            layout.addWidget(footer)
+            
+            self.sop_window_rac.setAttribute(Qt.WA_DeleteOnClose)
+            self.sop_window_rac.destroyed.connect(lambda: setattr(self, 'sop_window_rac', None))
+ 
+        self.sop_window_rac.show()
+        self.sop_window_rac.raise_()
+        self.sop_window_rac.activateWindow()
+
 
